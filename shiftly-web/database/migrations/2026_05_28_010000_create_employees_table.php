@@ -11,31 +11,6 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // Master department yang bisa dikelola manager dan dipakai filter jadwal.
-        Schema::create('departments', function (Blueprint $table) {
-            $table->id();
-            $table->string('name')->unique();
-            $table->string('code', 32)->nullable()->unique();
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-        });
-
-        // Constraint minimum staff/senior per department dan shift.
-        Schema::create('department_shift_requirements', function (Blueprint $table) {
-            $table->id();
-            $table->foreignId('department_id')
-                ->constrained()
-                ->cascadeOnDelete();
-            $table->enum('shift', ['Pagi', 'Sore', 'Malam']);
-            $table->unsignedSmallInteger('required_staff')->default(0);
-            $table->unsignedSmallInteger('required_senior')->default(0);
-            $table->boolean('is_active')->default(true);
-            $table->timestamps();
-
-            $table->unique(['department_id', 'shift']);
-            $table->index(['shift', 'is_active']);
-        });
-
         // Data employee dari CSV atau input manual, termasuk label cluster AI.
         Schema::create('employees', function (Blueprint $table) {
             $table->id();
@@ -76,7 +51,5 @@ return new class extends Migration
     public function down(): void
     {
         Schema::dropIfExists('employees');
-        Schema::dropIfExists('department_shift_requirements');
-        Schema::dropIfExists('departments');
     }
 };
