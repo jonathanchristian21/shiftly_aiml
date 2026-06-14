@@ -29,13 +29,10 @@ class ShiftlyAiService
             ->json();
     }
 
-    public function clusterEmployees(array $employees, int $clusters = 3): array
+    public function cluster(array $payload): array
     {
         return $this->client()
-            ->post('/cluster', [
-                'employees' => $employees,
-                'n_clusters' => $clusters,
-            ])
+            ->post('/cluster', $payload)
             ->throw()
             ->json();
     }
@@ -48,12 +45,10 @@ class ShiftlyAiService
             ->json();
     }
 
-    public function evaluateCandidates(array $candidates): array
+    public function evaluateCandidates(array $payload): array
     {
         return $this->client()
-            ->post('/evaluate-candidates', [
-                'candidates' => $candidates,
-            ])
+            ->post('/evaluate-candidates', $payload)
             ->throw()
             ->json();
     }
