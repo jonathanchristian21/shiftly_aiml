@@ -30,7 +30,7 @@
 
 <div class="card p-6 mb-6">
     <h2 class="text-title mb-4">Metrics</h2>
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-caption">
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-caption">
         <div>
             <div class="text-gray-500 mb-1">GA FITNESS</div>
             <div class="font-mono font-semibold">{{ number_format($schedule->selectedCandidate->ga_fitness, 1) }}</div>
@@ -38,10 +38,6 @@
         <div>
             <div class="text-gray-500 mb-1">ASSIGNMENTS</div>
             <div class="font-mono font-semibold">{{ $schedule->selectedCandidate->total_assignments }}</div>
-        </div>
-        <div>
-            <div class="text-gray-500 mb-1">CLUSTER BALANCE</div>
-            <div class="font-mono font-semibold">{{ $schedule->selectedCandidate->cluster_balance ? number_format($schedule->selectedCandidate->cluster_balance * 100, 1) . '%' : '-' }}</div>
         </div>
         <div>
             <div class="text-gray-500 mb-1">VIOLATIONS</div>
