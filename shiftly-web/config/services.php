@@ -37,7 +37,7 @@ return [
 
     'shiftly_ai' => [
         'url' => env('AI_SERVICE_URL', 'http://127.0.0.1:8000'),
-        'timeout' => env('AI_SERVICE_TIMEOUT', 120),
+        'timeout' => env('AI_SERVICE_TIMEOUT', 600), // 10 minutes for GA generation
     ],
 
 ];

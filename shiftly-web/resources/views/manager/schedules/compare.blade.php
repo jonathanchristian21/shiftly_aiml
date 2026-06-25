@@ -28,7 +28,6 @@
                     <th>TOTAL SALARY</th>
                     <th>ACTIVE EMPS</th>
                     <th>ASSIGNMENTS</th>
-                    <th>CLUSTER BAL</th>
                     <th>VIOLATIONS</th>
                     <th>ACTION</th>
                 </tr>
@@ -42,7 +41,6 @@
                     <td class="font-mono">${{ number_format($candidate['summary']['total_salary'] / 1000000, 2) }}M</td>
                     <td class="font-mono">{{ $candidate['summary']['active_employees'] }}</td>
                     <td class="font-mono">{{ $candidate['summary']['total_assignments'] }}</td>
-                    <td class="font-mono">{{ number_format($candidate['summary']['cluster_balance'] * 100, 1) }}%</td>
                     <td>
                         <span class="badge badge-{{ $candidate['summary']['hard_violation_count'] > 0 ? 'danger' : 'success' }}">
                             H:{{ $candidate['summary']['hard_violation_count'] }}
