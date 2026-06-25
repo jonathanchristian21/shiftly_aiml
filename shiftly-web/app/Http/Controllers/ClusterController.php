@@ -36,14 +36,18 @@ class ClusterController extends Controller
                     ->where('cluster_label', $cluster->cluster_label)
                     ->get();
 
+                // Mencegah error division by zero
+                $totalEmp = max($employees->count(), 1);
+
                 $clusterAnalysis[$cluster->cluster_label] = [
                     'count' => $employees->count(),
                     'avg_age' => round($employees->avg('age'), 1),
                     'avg_salary' => round($employees->avg('salary'), 2),
                     'avg_job_level' => round($employees->avg('job_level'), 1),
                     'avg_rating' => round($employees->avg('rating'), 1),
+                    'avg_satisfied' => round($employees->avg('satisfied'), 1), // DIKIRIM KE VIEW AGAR TIDAK ERROR
                     'avg_certifications' => round($employees->avg('certifications'), 1),
-                    'pg_percentage' => round(($employees->where('education', 'PG')->count() / $employees->count()) * 100, 1),
+                    'pg_percentage' => round(($employees->where('education', 'PG')->count() / $totalEmp) * 100, 1),
                     'senior_count' => $employees->where('is_senior', true)->count(),
                 ];
             }
@@ -54,11 +58,8 @@ class ClusterController extends Controller
 
     public function startClustering(Request $request)
     {
-        $validated = $request->validate([
-            'n_clusters' => 'integer|min:2|max:10',
-        ]);
-
-        $nClusters = $validated['n_clusters'] ?? 3;
+        // Kita kunci secara otomatis ke 4 cluster
+        $nClusters = 4;
 
         $employees = Employee::active()->get();
 
@@ -77,6 +78,7 @@ class ClusterController extends Controller
                     'age' => $emp->age,
                     'salary' => (float) $emp->salary,
                     'rating' => (float) $emp->rating,
+                    'satisfied' => (int) $emp->satisfied, // WAJIB DIKIRIM KE AI
                     'certifications' => $emp->certifications,
                 ])->toArray(),
                 'n_clusters' => $nClusters,
@@ -87,14 +89,14 @@ class ClusterController extends Controller
             DB::beginTransaction();
             foreach ($response['clusters'] as $cluster) {
                 Employee::where('id', $cluster['employee_id'])->update([
-                    'cluster_label' => $cluster['cluster'],
+                    'cluster_label' => $cluster['cluster'], // 1, 2, 3, atau 4
                     'clustered_at' => now(),
                 ]);
             }
             DB::commit();
 
             return redirect()->route('manager.cluster.show')
-                ->with('success', "Successfully clustered {$response['n_clusters']} groups.");
+                ->with('success', "Sukses! AI telah memetakan pegawai ke dalam 4 Profil Operasional (A, B, C, D).");
 
         } catch (\Exception $e) {
             DB::rollBack();

@@ -24,6 +24,7 @@ class Employee(BaseModel):
     age: int = Field(default=25, ge=16)
     salary: float = Field(default=0, ge=0)
     rating: float = Field(default=3, ge=0)
+    satisfied: int = Field(default=3, ge=0)
     certifications: int = Field(default=0, ge=0)
     cluster: int | None = None
     is_senior: bool | None = None
@@ -31,12 +32,14 @@ class Employee(BaseModel):
 
 class ClusterRequest(BaseModel):
     employees: list[Employee]
-    n_clusters: int = Field(default=3, ge=1, le=10)
+    n_clusters: int = Field(default=4, ge=1, le=10)
 
 
 class EmployeeCluster(BaseModel):
     employee_id: int
     cluster: int
+    cluster_name: str
+    description: str
 
 
 class ClusterResponse(BaseModel):

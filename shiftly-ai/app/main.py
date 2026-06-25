@@ -72,3 +72,11 @@ def evaluate(request: EvaluateCandidatesRequest) -> EvaluateCandidatesResponse:
         return EvaluateCandidatesResponse(candidates=candidates)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+@app.post("/cluster", response_model=ClusterResponse)
+def cluster(request: ClusterRequest) -> ClusterResponse:
+    try:
+        n_clusters, clusters = cluster_employees(request.employees, request.n_clusters)
+        return ClusterResponse(n_clusters=n_clusters, clusters=clusters)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error

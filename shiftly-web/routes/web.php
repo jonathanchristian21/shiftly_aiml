@@ -8,9 +8,17 @@ use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeScheduleController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ShiftRequirementController;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', fn() => redirect()->route('login'));
+Route::get('/', function () {
+    if (Auth::check()) {
+        return Auth::user()->role === 'manager' 
+            ? redirect()->route('manager.dashboard') 
+            : redirect()->route('employee.schedule');
+    }
+    return redirect()->route('login');
+});
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
