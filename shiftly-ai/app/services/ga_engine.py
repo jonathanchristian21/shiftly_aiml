@@ -35,25 +35,25 @@ WORKING_SHIFTS = ["Pagi", "Sore", "Malam"]
 ALL_SHIFTS = ["Pagi", "Sore", "Malam", "Libur"]
 
 # Fitness base
-BASE_FITNESS = 1000.0
+BASE_FITNESS = 10000.0  # Naikkan 10x untuk accommodate penalties
 
 # HARD CONSTRAINTS (wajib dipenuhi, penalti BESAR)
-W_STAFF_SHORTAGE = 80.0      # per orang kurang per shift
-W_STAFF_OVER = 6.0           # per orang lebih per shift (pemborosan)
-W_SENIOR_SHORTAGE = 100.0    # per senior kurang (kepala shift wajib)
+W_STAFF_SHORTAGE = 100.0     # per orang kurang per shift (KRITIS)
+W_STAFF_OVER = 8.0           # per orang lebih per shift (pemborosan)
+W_SENIOR_SHORTAGE = 120.0    # per senior kurang (kepala shift wajib)
 
 # SOFT CONSTRAINTS (diusahakan, penalti KECIL, boleh dilanggar kondisi darurat)
-W_MALAM_PAGI = 5.0           # shift malam→pagi berturut (ergonomi)
-W_WEEKLY_DAY_OFF = 3.0       # deviasi dari 2 hari libur/minggu
-W_JUNIOR_MENTORING = 1.5     # junior tanpa senior (mentoring)
+W_MALAM_PAGI = 1.5           # shift malam→pagi berturut (ergonomi) - turunkan lagi
+W_WEEKLY_DAY_OFF = 5.0       # deviasi dari 2 hari libur/minggu (naikkan, penting!)
+W_JUNIOR_MENTORING = 2.0     # junior tanpa senior (mentoring)
 
-# OPTIMIZATION OBJECTIVES (meminimalkan biaya — bobot diseimbangkan dengan soft constraint)
-W_ACTIVE_EMPLOYEE = 1.0      # per pegawai aktif (kurangi pegawai tanpa korbankan libur)
-W_ASSIGNMENT = 0.1           # per assignment (kurangi total shift kerja)
-W_SALARY_PER_MILLION = 0.5   # per juta rupiah total gaji
+# OPTIMIZATION OBJECTIVES (meminimalkan biaya — bobot diseimbangkan)
+W_ACTIVE_EMPLOYEE = 3.5      # per pegawai aktif (NAIKKAN untuk aggressive subset selection)
+W_ASSIGNMENT = 0.3           # per assignment (kurangi total shift kerja)
+W_SALARY_PER_MILLION = 1.5   # per juta rupiah total gaji (naikkan)
 
 # REWARD (bonus untuk distribusi baik)
-W_CLUSTER_BALANCE_REWARD = 20.0  # reward distribusi cluster merata
+W_CLUSTER_BALANCE_REWARD = 800.0  # reward distribusi cluster merata (NAIKKAN significally)
 
 Chromosome = dict[int, list[str]]
 RequirementKey = tuple[int, str]
@@ -125,26 +125,42 @@ def _cluster_balance(chromosome: Chromosome, employees_by_id: dict[int, Employee
     """Hitung keseimbangan distribusi cluster per shift.
     
     Semakin merata distribusi cluster, semakin tinggi skor (0-1).
-    Ini mencegah satu shift hanya diisi cluster D (rentan burnout).
+    Formula: 1 - (coefficient_of_variation / 2)
+    
+    Perfect balance (semua cluster sama): 1.0
+    Very imbalanced: 0.0
     """
     cluster_counts = Counter()
 
     for employee_id, shifts in chromosome.items():
+        if not _is_employee_active(chromosome[employee_id]):
+            continue  # Skip inactive employees
+        
         employee = employees_by_id[employee_id]
-        if employee.cluster is None:
+        if employee.cluster is None or employee.cluster == 0:
             continue
         cluster_counts[employee.cluster] += sum(1 for shift in shifts if shift != "Libur")
 
+    # Tidak ada cluster data atau hanya 1 cluster = imbalanced
     if len(cluster_counts) <= 1:
-        return 1.0
+        return 0.0
 
     counts = list(cluster_counts.values())
+    if not counts or sum(counts) == 0:
+        return 0.0
+    
+    # Hitung standard deviation dan coefficient of variation
     average = sum(counts) / len(counts)
     if average == 0:
-        return 1.0
-
-    spread = max(counts) - min(counts)
-    return round(max(0.0, 1.0 - (spread / (average + 1))), 4)
+        return 0.0
+    
+    variance = sum((x - average) ** 2 for x in counts) / len(counts)
+    std_dev = variance ** 0.5
+    coef_var = std_dev / average  # 0 = perfect, >1 = very spread
+    
+    # Normalize ke 0-1 (asumsi coef_var max ~2.0)
+    balance = max(0.0, 1.0 - (coef_var / 2.0))
+    return round(balance, 4)
 
 
 def _select_staff_cluster_aware(
@@ -525,11 +541,18 @@ def _fitness(
                 continue
 
             day_offs = week.count("Libur")
-            deviation = abs(day_offs - 2)
 
-            if deviation > 0:
+            if day_offs < 2:
+                # Pekerja lembur (kurang libur) -> penalti kesehatan berat
+                deviation = 2 - day_offs
                 weekly_day_off_violations += deviation
                 pen_soft += deviation * W_WEEKLY_DAY_OFF
+                soft_violation_count += 1
+            elif day_offs > 2:
+                # Pekerja part-time (banyak libur) -> penalti inefisiensi ringan
+                deviation = day_offs - 2
+                weekly_day_off_violations += deviation
+                pen_soft += deviation * (W_WEEKLY_DAY_OFF * 0.2)  # 20% penalty
                 soft_violation_count += 1
 
     # SOFT: mentoring (junior tanpa senior per shift)
@@ -569,11 +592,13 @@ def _fitness(
     reward = cluster_balance * W_CLUSTER_BALANCE_REWARD
 
     # ── NORMALISASI & FINAL FITNESS ───────────────────────────────
-    # Hapus normalisasi proporsional karena merusak skala bobot
+    # Formula: BASE_FITNESS - (penalties) + reward
+    # Tidak gunakan normalisasi proporsional karena bobot sudah diseimbangkan
     penalty_total = pen_hard + pen_soft + pen_optimization
     
     fitness = BASE_FITNESS - penalty_total + reward
-    fitness = max(0.0, min(BASE_FITNESS, fitness))
+    # Clamp ke range [0, BASE_FITNESS * 2] untuk akomodasi reward
+    fitness = max(0.0, min(BASE_FITNESS * 2, fitness))
 
     metrics = {
         "hard_violation_count": hard_violation_count,
