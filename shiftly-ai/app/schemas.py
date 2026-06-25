@@ -112,6 +112,7 @@ class ScheduleSummary(BaseModel):
     consecutive_shift_violations: int
     one_shift_per_day_violations: int
     weekly_day_off_violations: int
+    junior_mentoring_violations: int = 0
 
 
 class ConstraintReport(BaseModel):
