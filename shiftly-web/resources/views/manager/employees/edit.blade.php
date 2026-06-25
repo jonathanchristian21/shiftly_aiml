@@ -74,9 +74,9 @@
                 <label class="block text-sm font-medium text-gray-700 mb-2">Awards</label>
                 <input type="number" name="awards" value="{{ old('awards', $employee->awards) }}" min="0" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
             </div>
-            <div class="flex items-center">
-                <input type="checkbox" name="onsite" value="1" {{ old('onsite', $employee->onsite) ? 'checked' : '' }} class="mr-2">
-                <label class="text-sm font-medium text-gray-700">Onsite</label>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Onsite (Days/Week)</label>
+                <input type="number" name="onsite" value="{{ old('onsite', $employee->onsite) }}" min="0" max="7" class="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500">
             </div>
             <div class="flex items-center">
                 <input type="checkbox" name="satisfied" value="1" {{ old('satisfied', $employee->satisfied) ? 'checked' : '' }} class="mr-2">

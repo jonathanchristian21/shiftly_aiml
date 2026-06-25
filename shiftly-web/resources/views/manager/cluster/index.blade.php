@@ -206,7 +206,7 @@
                         </svg>
                         avg_satisfied
                     </span>
-                    <span class="text-body font-semibold mono">{{ $analysis['avg_satisfied'] ?? 'N/A' }}/5</span>
+                    <span class="text-body font-semibold mono">{{ isset($analysis['avg_satisfied']) ? number_format($analysis['avg_satisfied'] * 100, 0) . '%' : 'N/A' }}</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span class="text-caption flex items-center gap-2">
