@@ -68,7 +68,8 @@ def generate_schedules(request: GenerateScheduleRequest) -> GenerateScheduleResp
 @app.post("/evaluate-candidates", response_model=EvaluateCandidatesResponse)
 def evaluate(request: EvaluateCandidatesRequest) -> EvaluateCandidatesResponse:
     try:
-        candidates = evaluate_candidates(request.candidates)
+        employees_by_id = {emp.id: emp for emp in request.employees}
+        candidates = evaluate_candidates(request.candidates, employees_by_id)
         return EvaluateCandidatesResponse(candidates=candidates)
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error

@@ -139,6 +139,9 @@ class GenerateScheduleResponse(BaseModel):
 
 class EvaluateCandidatesRequest(BaseModel):
     candidates: list[ScheduleCandidate]
+    # Data employees dikirim ulang agar RF bisa pakai fitur asli pegawai
+    # (bukan hardcoded default). Opsional: jika kosong, fallback ke snapshot.
+    employees: list[Employee] = Field(default_factory=list)
 
 
 class EvaluatedCandidate(ScheduleCandidate):

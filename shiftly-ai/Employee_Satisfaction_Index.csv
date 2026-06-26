@@ -1,0 +1,501 @@
+emp_id,age,Dept,location,education,recruitment_type,job_level,rating,onsite,awards,certifications,salary,satisfied
+HR8270,28,Emergency Physician,Suburb,PG,Referral,5,2,0,1,0,86750,1
+TECH1860,50,Nurse Practitioner,Suburb,PG,Walk-in,3,5,1,2,1,42419,0
+TECH6390,43,General Practitioner,Suburb,UG,Referral,4,1,0,2,0,65715,0
+SAL6191,44,Orthopedic Surgeon,City,PG,On-Campus,2,3,1,0,0,29805,1
+HR6734,33,Radiologist,City,UG,Recruitment Agency,2,1,0,5,0,29805,1
+PUR7265,40,Orthopedic Surgeon,Suburb,UG,Referral,3,3,0,7,1,42419,1
+PUR1466,26,Pediatrician,Suburb,UG,Referral,5,5,0,2,0,86750,0
+TECH5426,25,Anesthesiologist,City,UG,Recruitment Agency,1,1,0,4,0,24076,0
+HR6578,35,Orthopedic Surgeon,City,PG,Referral,3,4,0,0,0,42419,1
+TECH9322,45,Nurse Practitioner,City,PG,Referral,3,3,0,9,0,42419,0
+MKT2685,31,Neurologist,City,UG,Walk-in,4,4,1,6,0,65715,1
+TECH1769,43,Registered Nurse,Suburb,PG,Recruitment Agency,2,1,0,9,1,29805,1
+TECH7949,28,Pediatrician,City,UG,On-Campus,3,4,1,0,0,42419,0
+PUR3433,48,Nurse Assistant,Suburb,PG,Referral,3,4,1,8,0,42419,1
+PUR6311,52,Surgeon,City,PG,Recruitment Agency,5,1,1,7,0,86750,1
+PUR6051,50,Surgeon,City,UG,Walk-in,5,5,1,6,0,86750,1
+MKT7420,34,Emergency Physician,City,PG,On-Campus,1,4,1,9,0,24076,0
+PUR2184,24,Oncologist,Suburb,UG,Recruitment Agency,4,4,0,6,0,65715,1
+HR5555,54,Cardiologist,Suburb,PG,On-Campus,1,5,0,4,0,24076,1
+SAL4385,25,Nurse Assistant,City,UG,On-Campus,5,4,0,4,0,86750,1
+HR7396,25,Pediatrician,Suburb,UG,On-Campus,2,4,1,4,0,29805,1
+HR9666,50,Pediatrician,Suburb,PG,Referral,5,4,0,0,0,86750,1
+PUR3558,34,Surgeon,City,PG,Referral,4,2,0,7,1,65715,1
+SAL8849,37,Cardiologist,City,UG,Walk-in,5,5,0,0,1,86750,1
+SAL3047,31,Nurse Practitioner,Suburb,PG,Walk-in,4,4,0,3,1,65715,0
+SAL3747,53,Anesthesiologist,Suburb,PG,Recruitment Agency,4,5,0,8,1,65715,0
+MKT1189,45,Surgeon,Suburb,UG,Walk-in,4,3,1,8,0,65715,1
+PUR3734,30,Anesthesiologist,City,UG,On-Campus,4,3,0,4,1,65715,0
+SAL4005,33,Registered Nurse,City,PG,On-Campus,4,4,1,3,1,65715,0
+MKT5658,38,Orthopedic Surgeon,Suburb,UG,Referral,2,5,1,2,0,29805,1
+TECH2899,54,General Practitioner,City,UG,On-Campus,1,5,1,2,1,24076,0
+TECH8734,48,Orthopedic Surgeon,City,UG,Recruitment Agency,3,5,1,4,1,42419,1
+MKT2267,49,Nurse Practitioner,Suburb,PG,On-Campus,1,2,1,9,0,24076,1
+MKT2528,47,General Practitioner,Suburb,PG,On-Campus,4,3,0,0,0,65715,1
+PUR4556,44,Neurologist,City,UG,Recruitment Agency,2,5,0,4,0,29805,1
+PUR4890,26,Orthopedic Surgeon,City,PG,Walk-in,5,5,0,5,1,86750,1
+TECH9838,50,Surgeon,Suburb,UG,Walk-in,2,2,1,6,1,29805,0
+SAL6393,23,Cardiologist,City,PG,Recruitment Agency,4,2,0,8,0,65715,1
+TECH9792,46,Orthopedic Surgeon,City,UG,Referral,2,5,0,2,0,29805,0
+SAL9433,29,Orthopedic Surgeon,Suburb,UG,On-Campus,2,1,1,1,1,29805,1
+SAL8513,24,Orthopedic Surgeon,Suburb,PG,Recruitment Agency,4,5,1,2,0,65715,1
+PUR3612,46,Pediatrician,City,UG,On-Campus,2,5,1,8,1,29805,1
+HR8041,50,General Practitioner,City,PG,Referral,3,2,1,6,0,42419,0
+HR7235,27,Cardiologist,City,PG,On-Campus,3,2,0,8,0,42419,1
+MKT6486,29,Anesthesiologist,Suburb,UG,Recruitment Agency,2,5,1,1,1,29805,1
+PUR8099,26,Anesthesiologist,City,UG,On-Campus,5,5,1,4,0,86750,1
+SAL1775,27,General Practitioner,City,PG,Walk-in,4,5,0,3,0,65715,1
+HR9226,46,Oncologist,Suburb,UG,Referral,3,2,0,1,0,42419,0
+SAL4152,23,Registered Nurse,Suburb,UG,Referral,5,5,1,8,1,86750,1
+HR2585,23,Pediatrician,City,UG,Referral,2,5,0,8,0,29805,0
+HR4943,37,Orthopedic Surgeon,Suburb,UG,Recruitment Agency,5,4,1,5,0,86750,1
+HR8555,42,Radiologist,Suburb,UG,Referral,1,1,1,5,0,24076,0
+PUR4073,41,Neurologist,City,PG,Walk-in,3,3,0,7,0,42419,0
+TECH2021,51,Pediatrician,Suburb,PG,Recruitment Agency,2,1,0,5,0,29805,1
+SAL4843,32,Emergency Physician,Suburb,UG,Walk-in,4,4,1,0,0,65715,1
+PUR8989,50,Neurologist,City,UG,On-Campus,2,3,1,3,1,29805,0
+PUR7873,40,General Practitioner,Suburb,UG,On-Campus,4,5,1,6,1,65715,1
+PUR6675,50,General Practitioner,City,PG,On-Campus,2,4,0,1,0,29805,1
+PUR1161,25,Registered Nurse,City,UG,On-Campus,5,5,1,8,1,86750,1
+PUR5297,33,Nurse Practitioner,Suburb,PG,Walk-in,5,2,1,7,1,86750,0
+MKT1995,37,Nurse Practitioner,Suburb,PG,Recruitment Agency,5,4,1,7,0,86750,1
+SAL8629,53,Nurse Assistant,Suburb,PG,Recruitment Agency,1,2,1,6,1,24076,1
+PUR2016,49,Surgeon,City,UG,Referral,4,4,1,3,1,65715,1
+SAL8869,52,Registered Nurse,Suburb,PG,Walk-in,5,4,0,1,1,86750,0
+MKT7439,33,Cardiologist,City,UG,On-Campus,1,2,1,2,1,24076,1
+MKT8892,39,Registered Nurse,Suburb,PG,Walk-in,4,3,1,5,1,65715,0
+SAL7863,39,Anesthesiologist,Suburb,UG,Referral,2,1,1,4,1,29805,1
+HR8916,28,Oncologist,Suburb,PG,Referral,1,5,1,7,1,24076,0
+TECH9529,54,Oncologist,City,UG,Walk-in,3,4,0,5,1,42419,1
+HR1878,27,Surgeon,Suburb,PG,Walk-in,1,5,0,5,0,24076,1
+HR5887,30,Cardiologist,Suburb,UG,Walk-in,1,2,0,0,0,24076,0
+HR5859,24,Cardiologist,City,UG,Recruitment Agency,4,5,1,3,1,65715,0
+PUR7331,38,Pediatrician,City,UG,On-Campus,2,2,1,4,1,29805,0
+MKT9571,42,Anesthesiologist,Suburb,UG,Walk-in,3,5,0,2,0,42419,1
+HR9684,46,Anesthesiologist,Suburb,PG,Walk-in,5,1,0,8,1,86750,1
+MKT8208,34,Orthopedic Surgeon,Suburb,PG,Walk-in,5,1,0,0,1,86750,1
+SAL6276,28,Nurse Assistant,City,UG,Referral,1,1,1,5,0,24076,1
+TECH3062,23,Pediatrician,City,PG,Referral,4,1,1,5,0,65715,0
+SAL1064,53,Radiologist,City,UG,Recruitment Agency,4,1,0,9,0,65715,1
+SAL9006,26,Neurologist,City,UG,On-Campus,5,1,0,4,1,86750,1
+PUR3568,39,Radiologist,Suburb,PG,Recruitment Agency,3,2,0,4,1,42419,1
+TECH6463,35,General Practitioner,City,UG,On-Campus,2,4,1,9,0,29805,1
+SAL3027,40,Orthopedic Surgeon,City,UG,Referral,3,5,1,4,0,42419,1
+SAL3695,27,Nurse Practitioner,City,PG,Referral,2,1,1,5,1,29805,1
+TECH6258,52,Emergency Physician,Suburb,UG,Referral,5,2,0,7,0,86750,1
+TECH6618,46,Anesthesiologist,Suburb,UG,Recruitment Agency,2,2,0,1,1,29805,0
+SAL7736,46,Oncologist,City,UG,Walk-in,4,2,1,5,1,65715,1
+TECH1391,49,Registered Nurse,City,UG,Walk-in,1,4,0,0,0,24076,1
+SAL6892,25,Radiologist,Suburb,PG,Referral,1,5,1,3,0,24076,1
+SAL4561,33,Registered Nurse,Suburb,PG,Walk-in,5,4,0,9,1,86750,1
+PUR7184,35,Nurse Assistant,Suburb,PG,Walk-in,4,3,0,2,0,65715,0
+HR4099,26,Registered Nurse,Suburb,UG,Recruitment Agency,3,2,0,8,0,42419,0
+SAL7278,48,Registered Nurse,Suburb,UG,On-Campus,4,3,0,2,0,65715,0
+MKT9392,49,Orthopedic Surgeon,Suburb,PG,Referral,1,1,1,5,0,24076,0
+HR4104,36,Emergency Physician,Suburb,UG,Referral,1,1,0,0,1,24076,0
+HR8215,44,Registered Nurse,Suburb,UG,Recruitment Agency,4,4,1,5,1,65715,0
+HR3454,33,Registered Nurse,City,UG,Recruitment Agency,4,5,1,3,1,65715,1
+PUR9996,54,Surgeon,City,UG,Walk-in,1,3,1,7,1,24076,0
+SAL3731,49,Registered Nurse,City,PG,Referral,3,5,0,8,0,42419,0
+PUR9154,32,Orthopedic Surgeon,City,PG,On-Campus,5,4,1,3,0,86750,1
+SAL6056,41,Oncologist,City,PG,Recruitment Agency,5,1,1,9,1,86750,0
+PUR9110,40,Pediatrician,City,UG,On-Campus,4,5,1,9,1,65715,1
+PUR4840,28,Nurse Practitioner,Suburb,PG,On-Campus,5,5,0,5,0,86750,1
+MKT2028,49,Nurse Practitioner,Suburb,PG,Referral,1,1,0,0,1,24076,0
+PUR8385,51,General Practitioner,City,UG,Referral,1,3,1,3,1,24076,1
+TECH1502,37,Cardiologist,City,UG,Recruitment Agency,4,1,0,6,0,65715,0
+MKT7910,43,Nurse Practitioner,Suburb,PG,Referral,4,5,1,0,1,65715,0
+PUR7938,52,Anesthesiologist,Suburb,PG,Referral,4,3,1,7,0,65715,1
+HR5488,32,Orthopedic Surgeon,Suburb,PG,Referral,3,3,0,9,0,42419,1
+TECH1206,27,General Practitioner,City,PG,On-Campus,5,1,1,5,1,86750,0
+TECH6134,48,Nurse Practitioner,Suburb,UG,Recruitment Agency,4,5,0,4,0,65715,1
+TECH6977,51,General Practitioner,City,PG,Walk-in,2,4,0,9,1,29805,1
+MKT8721,27,Cardiologist,City,PG,On-Campus,2,5,1,8,0,29805,0
+PUR8035,32,Neurologist,Suburb,UG,Referral,1,2,0,1,1,24076,0
+PUR2484,50,Registered Nurse,Suburb,PG,On-Campus,5,4,0,4,1,86750,1
+HR8858,27,Neurologist,City,UG,Referral,4,3,1,5,1,65715,0
+HR1863,25,General Practitioner,Suburb,UG,Referral,2,4,1,6,0,29805,0
+TECH3790,45,Orthopedic Surgeon,Suburb,UG,On-Campus,5,3,0,4,0,86750,0
+HR8408,28,Neurologist,City,PG,Recruitment Agency,1,3,0,8,1,24076,0
+MKT9755,26,Oncologist,Suburb,PG,Referral,3,4,1,0,0,42419,0
+PUR6116,40,General Practitioner,City,UG,Recruitment Agency,5,3,0,6,1,86750,0
+TECH7019,50,Pediatrician,City,PG,Walk-in,5,3,0,9,1,86750,0
+HR2757,31,Nurse Practitioner,Suburb,PG,Referral,3,2,0,6,0,42419,1
+MKT8574,39,Anesthesiologist,City,UG,Recruitment Agency,5,5,0,3,1,86750,0
+MKT7374,51,General Practitioner,City,UG,Recruitment Agency,1,5,0,8,0,24076,1
+HR7892,35,Oncologist,Suburb,PG,Walk-in,1,2,0,4,1,24076,1
+PUR2678,49,Neurologist,Suburb,UG,Recruitment Agency,3,4,0,3,0,42419,1
+HR4242,37,Radiologist,Suburb,PG,Recruitment Agency,4,1,1,6,1,65715,0
+TECH5636,52,Oncologist,City,PG,Walk-in,2,1,1,3,1,29805,0
+HR2059,42,Pediatrician,City,PG,Referral,4,1,1,2,0,65715,1
+MKT7668,39,Radiologist,Suburb,PG,Recruitment Agency,5,2,1,8,1,86750,0
+HR4157,35,Neurologist,City,UG,Recruitment Agency,2,2,1,7,1,29805,1
+PUR6915,54,Anesthesiologist,Suburb,UG,Recruitment Agency,3,3,0,0,0,42419,0
+SAL3693,38,Neurologist,Suburb,UG,On-Campus,3,1,0,6,1,42419,0
+HR4627,44,Orthopedic Surgeon,City,UG,Walk-in,2,4,0,8,0,29805,1
+PUR6450,26,Radiologist,Suburb,PG,On-Campus,1,4,0,7,1,24076,1
+PUR2663,27,Orthopedic Surgeon,City,PG,Walk-in,2,1,1,7,0,29805,1
+MKT6592,27,Neurologist,City,UG,Referral,5,1,0,5,1,86750,0
+PUR8392,31,Orthopedic Surgeon,Suburb,PG,Referral,1,1,0,3,1,24076,1
+PUR2306,39,Registered Nurse,City,PG,Recruitment Agency,3,2,1,7,1,42419,0
+PUR7776,35,Cardiologist,Suburb,PG,Walk-in,2,2,0,2,0,29805,0
+PUR6864,24,Neurologist,City,UG,Referral,4,2,0,8,0,65715,0
+TECH8526,35,Radiologist,City,UG,Walk-in,4,5,1,1,0,65715,1
+TECH9901,44,Anesthesiologist,City,UG,Referral,5,4,0,1,0,86750,1
+MKT6575,43,Oncologist,Suburb,PG,On-Campus,4,4,0,6,1,65715,1
+HR6530,49,Cardiologist,City,UG,Referral,2,3,0,9,1,29805,0
+PUR5413,45,Registered Nurse,Suburb,UG,On-Campus,2,2,0,3,0,29805,0
+HR4748,41,Oncologist,City,UG,Referral,4,5,0,9,0,65715,1
+HR1663,25,Nurse Assistant,City,UG,Recruitment Agency,2,5,1,7,0,29805,0
+MKT2998,32,Radiologist,Suburb,UG,On-Campus,5,4,1,8,1,86750,0
+PUR8994,24,Surgeon,Suburb,UG,Referral,1,2,1,6,0,24076,1
+PUR2495,54,Radiologist,Suburb,PG,Recruitment Agency,5,3,1,4,0,86750,1
+SAL4304,35,Neurologist,Suburb,PG,On-Campus,5,2,1,7,1,86750,1
+HR4763,41,Orthopedic Surgeon,Suburb,UG,Recruitment Agency,2,1,1,3,1,29805,0
+HR6232,48,General Practitioner,City,UG,Walk-in,1,2,0,1,0,24076,0
+TECH2853,39,General Practitioner,City,PG,Walk-in,2,1,1,5,1,29805,0
+SAL7585,43,Nurse Assistant,Suburb,PG,On-Campus,3,1,1,8,0,42419,0
+TECH2291,36,General Practitioner,City,UG,Referral,2,3,0,0,1,29805,0
+TECH4581,53,Nurse Assistant,City,UG,On-Campus,2,4,0,9,0,29805,1
+TECH8554,34,Orthopedic Surgeon,City,UG,Recruitment Agency,2,2,1,6,0,29805,0
+MKT8280,43,Oncologist,Suburb,UG,Referral,1,1,0,9,0,24076,0
+MKT2636,34,Orthopedic Surgeon,City,PG,Walk-in,2,2,1,8,0,29805,0
+TECH4696,33,Surgeon,City,UG,Referral,1,4,0,9,1,24076,1
+SAL1698,29,Emergency Physician,City,UG,Walk-in,4,4,1,8,1,65715,1
+HR5737,26,Surgeon,Suburb,UG,Referral,3,5,0,9,1,42419,1
+SAL1854,41,Surgeon,City,UG,Referral,1,4,0,2,1,24076,0
+PUR9164,23,Neurologist,City,PG,Referral,4,3,1,4,0,65715,1
+MKT6855,50,Orthopedic Surgeon,Suburb,PG,Recruitment Agency,1,1,1,7,0,24076,1
+HR8392,53,Neurologist,Suburb,PG,Recruitment Agency,1,5,1,7,1,24076,1
+HR7528,46,Radiologist,City,UG,On-Campus,3,3,1,3,1,42419,0
+PUR6249,51,General Practitioner,City,UG,On-Campus,5,2,1,0,1,86750,1
+PUR6172,25,Surgeon,Suburb,PG,Walk-in,5,1,0,0,1,86750,0
+TECH2707,35,Surgeon,Suburb,UG,Recruitment Agency,1,4,1,3,1,24076,0
+MKT6791,37,Orthopedic Surgeon,Suburb,UG,Walk-in,2,1,1,5,0,29805,1
+MKT6535,24,Surgeon,Suburb,PG,On-Campus,4,2,0,7,0,65715,0
+SAL5931,33,Oncologist,Suburb,PG,Walk-in,2,5,0,5,0,29805,1
+TECH4510,26,Neurologist,Suburb,PG,On-Campus,2,5,1,8,1,29805,0
+TECH1202,41,Surgeon,Suburb,PG,Recruitment Agency,1,5,0,8,1,24076,1
+TECH5218,51,Registered Nurse,City,UG,Referral,1,4,0,1,1,24076,1
+TECH9958,39,Orthopedic Surgeon,Suburb,UG,Recruitment Agency,1,3,1,9,1,24076,1
+MKT5389,25,Emergency Physician,Suburb,PG,Walk-in,1,3,0,0,0,24076,0
+MKT3327,50,General Practitioner,City,UG,Walk-in,5,1,0,1,0,86750,1
+TECH9004,40,Registered Nurse,Suburb,PG,Recruitment Agency,1,4,1,4,1,24076,0
+SAL3931,30,Orthopedic Surgeon,Suburb,PG,Recruitment Agency,5,5,1,3,0,86750,1
+HR8777,44,Radiologist,City,UG,On-Campus,5,5,0,3,0,86750,0
+HR1197,47,Emergency Physician,Suburb,PG,Walk-in,1,2,0,8,1,24076,0
+SAL8125,46,Nurse Assistant,City,UG,Walk-in,3,2,1,7,1,42419,1
+TECH2930,48,Anesthesiologist,City,UG,Recruitment Agency,4,5,0,5,1,65715,1
+MKT7287,41,Radiologist,City,UG,Referral,2,5,0,0,1,29805,1
+HR9800,27,Surgeon,City,UG,Walk-in,5,4,0,1,1,86750,1
+PUR5282,29,General Practitioner,Suburb,PG,Referral,4,3,1,5,1,65715,1
+PUR3511,43,Surgeon,City,UG,Recruitment Agency,3,2,0,1,0,42419,0
+SAL1659,30,Nurse Practitioner,City,PG,Recruitment Agency,2,3,0,9,0,29805,1
+TECH3811,50,Anesthesiologist,Suburb,PG,On-Campus,2,4,1,4,1,29805,1
+HR8098,27,General Practitioner,City,PG,Walk-in,5,5,0,4,0,86750,0
+TECH7546,39,Emergency Physician,City,PG,Referral,1,3,0,5,1,24076,1
+HR2986,27,Anesthesiologist,City,UG,On-Campus,3,5,1,5,1,42419,1
+SAL9338,26,Nurse Assistant,City,UG,Walk-in,5,5,1,5,1,86750,0
+SAL3911,44,Nurse Practitioner,Suburb,PG,On-Campus,3,1,1,1,1,42419,1
+PUR2734,41,Orthopedic Surgeon,City,PG,Recruitment Agency,1,3,1,9,0,24076,1
+TECH2843,53,Cardiologist,Suburb,UG,Walk-in,1,3,0,2,1,24076,1
+PUR9680,54,Surgeon,Suburb,PG,On-Campus,5,5,0,5,0,86750,0
+TECH3976,49,General Practitioner,City,UG,On-Campus,1,4,1,7,1,24076,1
+PUR2959,43,Registered Nurse,City,PG,Referral,4,1,1,0,1,65715,0
+MKT6759,24,Radiologist,City,UG,On-Campus,2,5,0,0,1,29805,1
+MKT7694,33,Radiologist,City,PG,Walk-in,5,2,1,1,0,86750,0
+MKT3385,44,Anesthesiologist,Suburb,PG,Walk-in,3,2,0,5,1,42419,1
+MKT5736,35,Nurse Assistant,Suburb,UG,Referral,4,1,1,8,1,65715,0
+HR2802,37,Nurse Practitioner,Suburb,PG,Walk-in,5,4,0,3,1,86750,0
+MKT9155,34,Pediatrician,City,PG,Recruitment Agency,1,5,1,2,0,24076,0
+SAL9120,44,Surgeon,Suburb,UG,Walk-in,1,3,1,7,0,24076,0
+SAL7616,43,Surgeon,City,PG,Walk-in,1,1,0,9,0,24076,0
+HR6534,44,Anesthesiologist,City,UG,On-Campus,1,4,1,8,1,24076,0
+MKT5061,33,Neurologist,City,UG,On-Campus,3,3,0,4,0,42419,1
+MKT1262,29,Surgeon,City,PG,Walk-in,4,2,0,8,1,65715,1
+MKT7287,50,Nurse Assistant,City,PG,Referral,2,2,0,1,0,29805,0
+PUR9815,27,Radiologist,Suburb,PG,On-Campus,3,3,0,2,0,42419,0
+TECH3049,39,Nurse Assistant,Suburb,PG,Referral,3,1,0,6,1,42419,0
+PUR6423,46,Anesthesiologist,City,PG,Walk-in,2,2,1,6,0,29805,0
+TECH5548,42,Cardiologist,Suburb,PG,Walk-in,2,5,1,5,1,29805,1
+MKT4108,31,Nurse Assistant,City,PG,Recruitment Agency,1,3,0,5,1,24076,0
+MKT8158,36,Emergency Physician,City,UG,On-Campus,3,3,1,1,0,42419,1
+PUR8400,48,Surgeon,City,PG,Walk-in,5,2,0,9,1,86750,1
+PUR4170,34,Surgeon,Suburb,UG,Recruitment Agency,2,1,1,5,1,29805,0
+TECH3255,28,Orthopedic Surgeon,City,PG,On-Campus,2,5,1,3,0,29805,0
+SAL2154,39,Neurologist,City,PG,Walk-in,4,1,1,2,0,65715,1
+TECH5499,41,Orthopedic Surgeon,Suburb,UG,Walk-in,5,4,1,1,1,86750,1
+PUR7295,41,Oncologist,Suburb,PG,On-Campus,5,4,0,0,0,86750,0
+PUR7197,48,Emergency Physician,Suburb,PG,On-Campus,2,2,0,4,1,29805,0
+HR2648,38,Nurse Assistant,City,UG,On-Campus,1,2,1,1,1,24076,0
+PUR6539,34,Orthopedic Surgeon,City,PG,Walk-in,4,2,1,1,0,65715,1
+HR5199,34,Nurse Assistant,Suburb,PG,Walk-in,5,4,0,6,0,86750,1
+SAL9445,42,Nurse Practitioner,City,PG,Recruitment Agency,2,1,1,7,0,29805,0
+TECH3557,54,Pediatrician,Suburb,UG,Referral,5,1,0,9,0,86750,1
+TECH6592,28,Radiologist,Suburb,PG,On-Campus,4,2,0,7,1,65715,1
+HR1098,53,General Practitioner,City,PG,Walk-in,4,5,0,3,1,65715,0
+TECH3200,45,Radiologist,City,PG,Walk-in,3,1,1,0,0,42419,0
+PUR3961,48,Surgeon,Suburb,PG,On-Campus,2,4,0,6,0,29805,1
+MKT5973,26,Registered Nurse,Suburb,UG,Referral,4,3,1,0,1,65715,1
+HR5433,28,Oncologist,Suburb,UG,On-Campus,3,3,0,3,1,42419,0
+TECH3869,33,Nurse Assistant,Suburb,PG,Referral,3,3,1,7,1,42419,0
+HR1956,23,Radiologist,City,PG,Walk-in,5,5,1,1,1,86750,0
+HR9352,52,Nurse Practitioner,Suburb,UG,Referral,5,2,1,5,0,86750,0
+MKT6699,46,Emergency Physician,Suburb,UG,Recruitment Agency,3,4,0,5,1,42419,0
+PUR7944,45,Surgeon,Suburb,PG,Walk-in,5,5,0,8,1,86750,1
+HR5493,37,Neurologist,City,UG,Recruitment Agency,4,4,1,4,0,65715,1
+TECH5911,49,Radiologist,City,PG,On-Campus,1,4,1,9,1,24076,1
+SAL4987,33,Orthopedic Surgeon,Suburb,UG,On-Campus,4,2,1,3,1,65715,1
+HR7015,54,Anesthesiologist,City,UG,On-Campus,3,3,0,4,0,42419,0
+HR2218,47,Pediatrician,City,UG,Referral,3,2,0,9,0,42419,0
+MKT5496,41,Nurse Practitioner,City,UG,Walk-in,4,5,0,4,0,65715,0
+PUR5735,40,Orthopedic Surgeon,Suburb,PG,On-Campus,5,5,0,7,1,86750,1
+SAL5555,39,Registered Nurse,Suburb,UG,On-Campus,5,5,1,9,1,86750,1
+TECH9050,41,Nurse Practitioner,City,UG,Walk-in,3,2,1,7,0,42419,1
+SAL4446,43,Orthopedic Surgeon,Suburb,PG,On-Campus,2,4,0,1,0,29805,0
+TECH2045,36,Orthopedic Surgeon,Suburb,UG,Recruitment Agency,5,4,0,6,1,86750,1
+PUR7893,49,Pediatrician,City,UG,Walk-in,4,1,1,7,0,65715,0
+TECH2693,40,Anesthesiologist,City,PG,Walk-in,5,5,0,5,0,86750,0
+MKT4436,50,Anesthesiologist,Suburb,UG,Walk-in,4,4,0,4,0,65715,0
+MKT9754,41,Anesthesiologist,City,PG,Recruitment Agency,3,1,0,8,1,42419,0
+MKT6895,37,Pediatrician,Suburb,PG,Walk-in,5,4,0,2,1,86750,0
+MKT4354,53,Orthopedic Surgeon,Suburb,PG,Recruitment Agency,4,5,0,9,1,65715,0
+SAL1225,37,Oncologist,City,PG,Walk-in,3,3,0,3,1,42419,1
+PUR5893,26,Neurologist,Suburb,UG,Referral,2,5,1,8,1,29805,0
+TECH8022,29,Emergency Physician,Suburb,PG,On-Campus,4,2,0,5,1,65715,0
+TECH6600,35,Orthopedic Surgeon,City,UG,Referral,2,4,0,7,0,29805,1
+MKT8996,25,Anesthesiologist,City,UG,On-Campus,2,4,1,6,1,29805,0
+MKT8683,38,Oncologist,City,UG,Recruitment Agency,1,2,1,1,1,24076,1
+HR5642,53,Radiologist,Suburb,UG,Referral,5,2,1,2,0,86750,1
+PUR8679,31,Pediatrician,City,UG,Walk-in,4,3,0,0,1,65715,1
+SAL9208,30,Pediatrician,City,UG,On-Campus,2,4,1,8,1,29805,0
+TECH8339,42,Nurse Practitioner,City,UG,On-Campus,1,4,0,6,0,24076,0
+HR3205,35,Cardiologist,City,UG,Referral,3,3,0,0,0,42419,1
+HR2069,39,Emergency Physician,Suburb,UG,Recruitment Agency,4,1,0,2,0,65715,0
+TECH4444,39,Neurologist,Suburb,UG,Referral,2,3,1,3,1,29805,0
+SAL2060,39,Neurologist,City,PG,Recruitment Agency,5,5,1,3,0,86750,1
+HR3327,23,Surgeon,Suburb,PG,Recruitment Agency,1,4,1,4,1,24076,1
+HR4420,54,Cardiologist,City,PG,On-Campus,2,2,1,2,1,29805,0
+PUR1301,30,Nurse Practitioner,City,UG,Referral,5,5,1,2,1,86750,1
+SAL1606,41,Surgeon,Suburb,PG,Referral,2,4,0,0,1,29805,1
+HR4170,53,Registered Nurse,Suburb,PG,Recruitment Agency,4,3,0,6,0,65715,1
+SAL1699,28,General Practitioner,City,PG,Referral,4,5,0,9,0,65715,0
+TECH6088,25,Radiologist,City,UG,Walk-in,4,4,0,0,1,65715,0
+MKT1190,49,Neurologist,Suburb,UG,Walk-in,1,1,1,1,0,24076,0
+HR1980,27,Nurse Practitioner,City,UG,Referral,4,1,1,3,1,65715,1
+PUR3975,35,Nurse Practitioner,Suburb,UG,Referral,5,2,0,3,1,86750,0
+TECH7102,37,General Practitioner,City,PG,Recruitment Agency,2,4,1,4,1,29805,1
+SAL2184,36,Surgeon,City,PG,Walk-in,3,1,1,1,0,42419,0
+TECH4327,51,Cardiologist,Suburb,PG,Walk-in,5,3,0,3,1,86750,0
+HR4394,53,Cardiologist,Suburb,PG,On-Campus,5,4,0,0,1,86750,1
+SAL9319,45,General Practitioner,Suburb,UG,Recruitment Agency,4,3,1,1,0,65715,0
+MKT2816,38,Orthopedic Surgeon,Suburb,UG,On-Campus,1,3,1,0,0,24076,1
+TECH6854,40,Surgeon,Suburb,UG,Walk-in,2,1,0,9,0,29805,0
+HR7709,54,Radiologist,Suburb,PG,Recruitment Agency,1,4,0,9,0,24076,0
+PUR1569,44,Surgeon,Suburb,UG,Referral,2,5,0,3,1,29805,1
+SAL6442,51,Registered Nurse,City,UG,Recruitment Agency,2,1,1,3,0,29805,1
+TECH2895,44,Registered Nurse,City,PG,Referral,1,1,0,6,1,24076,1
+TECH3733,33,General Practitioner,City,PG,Referral,5,4,0,9,0,86750,0
+MKT4863,25,Anesthesiologist,Suburb,UG,Recruitment Agency,2,4,1,8,0,29805,0
+MKT8455,44,Orthopedic Surgeon,Suburb,UG,Referral,1,3,1,8,0,24076,0
+PUR5014,32,Pediatrician,Suburb,UG,On-Campus,2,4,1,4,0,29805,1
+PUR2686,32,Emergency Physician,City,UG,Walk-in,3,3,1,9,0,42419,1
+HR4009,54,Orthopedic Surgeon,Suburb,UG,Referral,5,1,1,0,0,86750,1
+HR8806,52,Neurologist,Suburb,UG,On-Campus,4,2,0,0,1,65715,0
+PUR1154,43,Cardiologist,City,PG,Referral,2,5,0,5,0,29805,0
+PUR2409,38,Cardiologist,Suburb,PG,Walk-in,3,1,1,1,0,42419,1
+SAL1784,34,Neurologist,City,PG,On-Campus,4,4,1,7,0,65715,0
+MKT9096,24,Cardiologist,City,UG,Walk-in,4,5,1,8,0,65715,1
+HR8560,31,Registered Nurse,Suburb,PG,Walk-in,2,2,1,3,1,29805,0
+MKT8343,46,Neurologist,Suburb,UG,On-Campus,1,2,1,4,0,24076,0
+MKT8206,25,Nurse Practitioner,Suburb,UG,On-Campus,2,3,0,7,0,29805,1
+PUR6596,46,Nurse Practitioner,City,PG,On-Campus,3,5,0,2,0,42419,0
+SAL6801,52,Emergency Physician,City,UG,Recruitment Agency,4,3,0,4,0,65715,0
+TECH3806,47,Emergency Physician,City,UG,On-Campus,2,1,0,2,1,29805,1
+SAL1537,52,Nurse Practitioner,Suburb,PG,On-Campus,1,5,1,9,0,24076,1
+SAL6986,37,Neurologist,Suburb,PG,On-Campus,2,1,0,2,1,29805,0
+MKT2841,25,Radiologist,Suburb,PG,On-Campus,5,3,1,2,0,86750,1
+SAL9716,41,Nurse Practitioner,Suburb,UG,Referral,1,5,1,6,1,24076,0
+HR7971,40,Pediatrician,City,PG,Recruitment Agency,3,3,1,6,1,42419,1
+MKT6625,30,Pediatrician,City,PG,Walk-in,4,5,0,6,0,65715,0
+HR3950,48,Radiologist,City,UG,On-Campus,2,3,1,9,0,29805,0
+TECH8992,39,Nurse Assistant,City,PG,Referral,1,2,0,7,1,24076,1
+MKT5780,30,Cardiologist,Suburb,PG,Referral,5,3,0,4,1,86750,0
+TECH3368,29,Nurse Assistant,Suburb,PG,Referral,1,2,1,4,0,24076,0
+MKT7655,52,Pediatrician,Suburb,UG,Walk-in,5,3,1,3,1,86750,1
+PUR9173,29,Neurologist,City,UG,On-Campus,3,5,1,6,1,42419,1
+SAL5495,25,Emergency Physician,City,UG,Recruitment Agency,4,5,0,9,1,65715,0
+PUR7002,23,Radiologist,Suburb,UG,Recruitment Agency,3,5,1,3,0,42419,1
+TECH7614,26,Orthopedic Surgeon,Suburb,PG,Referral,2,4,0,1,1,29805,1
+SAL6919,47,Cardiologist,City,UG,Walk-in,1,1,1,3,1,24076,0
+MKT1853,27,Anesthesiologist,Suburb,UG,Walk-in,5,5,1,7,1,86750,0
+SAL5146,23,Nurse Practitioner,City,PG,Walk-in,5,2,0,8,0,86750,1
+HR4769,37,Anesthesiologist,City,PG,Recruitment Agency,1,5,0,2,0,24076,1
+SAL1574,27,Anesthesiologist,City,PG,Referral,1,4,0,6,1,24076,1
+HR2148,35,Neurologist,Suburb,UG,On-Campus,2,2,0,8,0,29805,0
+SAL7293,30,General Practitioner,Suburb,UG,Recruitment Agency,3,4,0,3,1,42419,0
+HR7457,30,Radiologist,City,UG,Referral,5,2,0,9,0,86750,0
+TECH8509,27,Anesthesiologist,Suburb,PG,Referral,2,3,1,2,0,29805,0
+PUR5777,50,Emergency Physician,City,PG,On-Campus,3,1,1,4,1,42419,0
+MKT4854,54,Radiologist,City,UG,On-Campus,2,1,0,0,0,29805,0
+SAL3491,31,Cardiologist,City,PG,On-Campus,5,4,1,2,0,86750,0
+PUR4124,53,Anesthesiologist,City,PG,Walk-in,1,1,0,7,0,24076,1
+MKT6691,23,Oncologist,Suburb,PG,On-Campus,1,4,1,7,1,24076,1
+MKT4051,26,General Practitioner,City,UG,Referral,3,4,1,3,0,42419,0
+HR1004,25,Nurse Assistant,City,PG,On-Campus,4,4,0,1,0,65715,0
+TECH6222,24,General Practitioner,Suburb,PG,Referral,3,1,0,7,1,42419,0
+TECH6315,53,Oncologist,City,UG,Recruitment Agency,4,4,0,7,0,65715,1
+PUR5869,30,Registered Nurse,City,UG,Walk-in,2,1,1,9,0,29805,0
+TECH1876,45,Surgeon,Suburb,PG,Recruitment Agency,2,4,0,3,0,29805,1
+SAL8027,31,Registered Nurse,Suburb,PG,Recruitment Agency,5,5,1,2,0,86750,1
+TECH5142,24,Orthopedic Surgeon,Suburb,UG,Referral,4,4,0,1,0,65715,1
+PUR7966,36,Orthopedic Surgeon,City,UG,Recruitment Agency,5,2,1,8,1,86750,1
+TECH8079,36,Surgeon,Suburb,PG,Referral,1,4,1,0,1,24076,1
+SAL8987,54,Surgeon,Suburb,PG,On-Campus,4,3,0,6,0,65715,0
+HR7799,26,Radiologist,City,PG,On-Campus,3,4,1,4,0,42419,0
+PUR5465,52,Radiologist,City,PG,Referral,1,2,1,7,0,24076,1
+HR1635,53,Pediatrician,City,UG,On-Campus,1,2,0,3,1,24076,0
+HR2693,28,General Practitioner,City,PG,Walk-in,3,1,1,6,1,42419,1
+HR5752,33,Orthopedic Surgeon,City,PG,Recruitment Agency,1,5,0,4,0,24076,1
+MKT9311,25,Surgeon,Suburb,UG,Walk-in,4,4,0,4,0,65715,0
+MKT1830,30,Pediatrician,Suburb,PG,Recruitment Agency,5,1,0,8,1,86750,0
+HR6177,25,Pediatrician,Suburb,UG,On-Campus,1,5,0,8,0,24076,0
+PUR9932,36,Oncologist,City,PG,Walk-in,4,4,1,8,1,65715,0
+SAL9308,50,Cardiologist,City,PG,On-Campus,2,3,1,5,1,29805,0
+SAL6949,35,Surgeon,City,UG,Recruitment Agency,4,4,1,5,0,65715,1
+TECH3838,35,Registered Nurse,Suburb,UG,Referral,5,2,0,4,1,86750,0
+PUR2150,54,Pediatrician,Suburb,PG,Referral,4,2,1,8,0,65715,0
+MKT8560,24,General Practitioner,City,PG,Walk-in,3,3,1,9,0,42419,0
+HR2931,35,Radiologist,Suburb,PG,On-Campus,5,1,0,7,0,86750,1
+TECH2664,51,Emergency Physician,City,UG,On-Campus,2,5,0,6,0,29805,0
+SAL2081,41,Registered Nurse,Suburb,PG,Walk-in,3,4,1,6,0,42419,1
+MKT1512,49,Anesthesiologist,Suburb,UG,Referral,4,2,0,5,0,65715,0
+MKT8805,28,General Practitioner,Suburb,UG,Recruitment Agency,5,1,0,4,1,86750,0
+HR6237,38,Oncologist,City,PG,Walk-in,2,3,0,3,1,29805,1
+SAL1559,24,Nurse Assistant,Suburb,UG,Recruitment Agency,3,2,0,2,1,42419,0
+PUR4672,30,Emergency Physician,Suburb,PG,Referral,2,3,1,2,1,29805,0
+MKT8404,39,Registered Nurse,City,PG,On-Campus,4,4,0,5,0,65715,1
+HR4343,45,Neurologist,Suburb,PG,Referral,2,5,0,3,1,29805,0
+PUR5070,24,Registered Nurse,City,PG,Walk-in,1,2,0,5,1,24076,1
+SAL1580,32,Nurse Assistant,City,PG,On-Campus,3,2,0,2,1,42419,1
+MKT8004,50,Orthopedic Surgeon,City,UG,Walk-in,2,4,0,3,0,29805,1
+PUR9130,38,Oncologist,City,UG,Walk-in,4,1,0,8,1,65715,1
+PUR4147,28,Orthopedic Surgeon,City,PG,Referral,4,5,0,4,0,65715,1
+PUR5249,50,Pediatrician,Suburb,PG,Walk-in,2,2,0,6,1,29805,0
+MKT2679,24,Surgeon,City,UG,Referral,4,5,1,9,0,65715,0
+MKT4506,24,Nurse Practitioner,City,UG,On-Campus,5,2,0,1,0,86750,0
+TECH8253,48,General Practitioner,City,UG,Referral,5,5,1,4,1,86750,1
+SAL3744,35,Surgeon,City,UG,On-Campus,5,3,0,8,0,86750,1
+HR6188,46,Nurse Practitioner,Suburb,PG,Referral,1,2,0,2,0,24076,1
+PUR3141,37,Radiologist,City,PG,Recruitment Agency,2,5,0,8,1,29805,1
+TECH7617,53,Registered Nurse,Suburb,UG,Recruitment Agency,1,1,0,5,1,24076,0
+HR3479,50,Pediatrician,City,PG,Walk-in,4,3,1,3,1,65715,0
+TECH7484,24,Emergency Physician,Suburb,UG,Referral,1,3,0,6,0,24076,1
+MKT8421,29,Oncologist,City,PG,Referral,4,1,0,7,0,65715,1
+PUR5452,25,Oncologist,City,UG,On-Campus,4,5,1,5,0,65715,0
+HR6881,30,Registered Nurse,Suburb,PG,Walk-in,3,4,1,4,1,42419,1
+HR7665,45,Cardiologist,City,UG,Referral,5,1,0,5,0,86750,1
+HR3849,36,Radiologist,Suburb,UG,Walk-in,4,5,1,4,0,65715,1
+HR8390,46,Orthopedic Surgeon,City,PG,Recruitment Agency,3,1,1,7,0,42419,0
+HR7905,52,Orthopedic Surgeon,Suburb,UG,Referral,5,1,1,0,0,86750,0
+TECH3489,45,Anesthesiologist,City,PG,Referral,4,2,0,6,0,65715,1
+PUR5611,49,Neurologist,City,PG,Walk-in,4,5,0,9,0,65715,0
+MKT3839,44,Nurse Practitioner,Suburb,UG,Referral,1,4,0,9,0,24076,1
+MKT9527,51,Neurologist,City,PG,Walk-in,1,2,1,1,1,24076,1
+MKT6878,29,Orthopedic Surgeon,City,PG,Referral,5,1,0,8,1,86750,0
+MKT7303,43,Nurse Practitioner,City,PG,On-Campus,4,1,1,0,1,65715,1
+TECH1851,29,Oncologist,City,PG,Walk-in,2,1,0,9,0,29805,1
+SAL2687,23,Radiologist,City,PG,Referral,1,5,0,5,0,24076,0
+PUR7833,39,Pediatrician,City,UG,Recruitment Agency,5,5,1,8,1,86750,1
+HR3427,31,Emergency Physician,Suburb,PG,Referral,4,2,0,0,0,65715,1
+SAL5000,52,Emergency Physician,Suburb,PG,Recruitment Agency,4,4,1,3,1,65715,1
+MKT6052,43,Neurologist,Suburb,PG,Recruitment Agency,2,2,1,3,0,29805,0
+SAL3738,35,Pediatrician,City,PG,On-Campus,5,3,0,8,0,86750,1
+PUR6732,43,Cardiologist,Suburb,PG,Walk-in,4,1,1,4,1,65715,0
+HR6387,41,Nurse Assistant,City,UG,Referral,1,1,0,4,1,24076,1
+HR9002,43,Oncologist,City,PG,On-Campus,2,1,0,5,1,29805,1
+PUR6536,41,Nurse Practitioner,City,UG,Referral,5,2,1,0,1,86750,1
+PUR4913,47,General Practitioner,City,UG,Recruitment Agency,2,2,0,0,1,29805,1
+MKT2066,47,Radiologist,Suburb,UG,Walk-in,1,1,1,8,0,24076,0
+HR8723,44,General Practitioner,City,UG,Referral,5,2,0,2,0,86750,0
+SAL5380,53,Oncologist,Suburb,PG,Referral,2,5,0,3,0,29805,1
+TECH5107,39,Emergency Physician,City,UG,Recruitment Agency,3,5,0,0,1,42419,1
+TECH6726,45,Orthopedic Surgeon,Suburb,UG,Referral,1,2,0,8,1,24076,1
+PUR4373,45,Oncologist,Suburb,PG,Referral,1,1,0,7,1,24076,1
+MKT9945,54,Cardiologist,Suburb,PG,Recruitment Agency,1,2,1,1,1,24076,1
+TECH3082,52,Oncologist,Suburb,PG,On-Campus,3,2,1,7,1,42419,1
+HR9967,32,Anesthesiologist,Suburb,UG,Recruitment Agency,3,2,1,6,1,42419,1
+PUR7748,32,Emergency Physician,Suburb,PG,On-Campus,4,3,1,5,0,65715,1
+SAL1417,26,Anesthesiologist,City,PG,Walk-in,2,5,1,0,0,29805,0
+PUR9306,30,Nurse Assistant,Suburb,UG,On-Campus,4,4,1,6,0,65715,0
+SAL9808,44,Nurse Assistant,City,PG,On-Campus,2,4,0,9,0,29805,0
+PUR4974,42,Pediatrician,Suburb,PG,Walk-in,3,3,0,6,0,42419,1
+PUR4267,42,Surgeon,City,PG,On-Campus,3,2,1,8,1,42419,1
+PUR1825,54,Surgeon,Suburb,PG,Recruitment Agency,4,3,1,0,1,65715,1
+SAL8668,40,Pediatrician,Suburb,UG,On-Campus,5,3,0,1,1,86750,0
+SAL6745,36,General Practitioner,City,PG,Walk-in,4,1,0,8,1,65715,1
+PUR1412,40,Surgeon,Suburb,PG,Recruitment Agency,2,5,0,8,1,29805,0
+TECH8543,50,Nurse Assistant,Suburb,UG,Walk-in,4,4,1,5,1,65715,1
+MKT8587,36,Surgeon,Suburb,PG,Walk-in,1,2,1,5,0,24076,0
+MKT1728,42,Anesthesiologist,City,UG,Referral,2,4,1,3,1,29805,0
+MKT8164,43,Surgeon,Suburb,PG,Referral,2,4,0,3,1,29805,0
+SAL9867,46,Orthopedic Surgeon,City,UG,Walk-in,5,5,0,4,1,86750,1
+SAL6988,37,Nurse Assistant,Suburb,UG,Walk-in,3,4,1,2,1,42419,0
+TECH3504,44,Cardiologist,Suburb,UG,Walk-in,2,4,1,0,0,29805,1
+MKT3967,52,Pediatrician,City,UG,Referral,3,3,0,0,0,42419,1
+MKT3786,53,Registered Nurse,Suburb,PG,Referral,4,5,0,6,1,65715,1
+PUR2122,26,Anesthesiologist,Suburb,UG,On-Campus,1,1,0,0,0,24076,1
+SAL5079,35,Neurologist,City,PG,On-Campus,5,2,0,0,0,86750,1
+MKT2571,49,Emergency Physician,Suburb,UG,Walk-in,3,4,1,2,1,42419,0
+TECH6073,45,General Practitioner,City,UG,Recruitment Agency,2,2,0,9,1,29805,1
+TECH6104,30,Surgeon,City,UG,Recruitment Agency,3,1,0,3,1,42419,1
+MKT3143,40,Neurologist,City,PG,Referral,2,2,0,3,1,29805,1
+SAL7806,34,Pediatrician,Suburb,UG,Referral,3,1,1,1,1,42419,1
+TECH8357,45,Surgeon,City,PG,Referral,2,3,1,0,0,29805,1
+PUR4440,53,Registered Nurse,City,PG,Walk-in,4,4,0,2,1,65715,0
+TECH4766,36,Registered Nurse,Suburb,PG,Recruitment Agency,2,1,0,3,1,29805,0
+HR6644,24,Emergency Physician,City,PG,On-Campus,2,2,0,2,1,29805,1
+HR3914,40,Cardiologist,Suburb,PG,Walk-in,1,4,1,7,0,24076,0
+SAL5968,46,Pediatrician,Suburb,PG,On-Campus,2,3,1,9,1,29805,0
+MKT6917,24,Nurse Assistant,Suburb,PG,On-Campus,1,4,1,0,1,24076,1
+SAL9787,53,Anesthesiologist,Suburb,PG,Walk-in,5,1,0,1,1,86750,0
+SAL1728,33,Registered Nurse,City,PG,On-Campus,1,3,1,6,0,24076,1
+SAL2365,31,Cardiologist,City,UG,Recruitment Agency,4,2,0,3,1,65715,0
+SAL5492,34,Nurse Practitioner,City,UG,On-Campus,1,3,0,7,1,24076,0
+PUR1698,39,Anesthesiologist,City,UG,Recruitment Agency,5,3,0,2,1,86750,0
+PUR8186,37,Pediatrician,City,UG,Recruitment Agency,4,5,1,5,0,65715,1
+TECH1395,47,Radiologist,Suburb,UG,Recruitment Agency,3,3,0,8,1,42419,0
+HR8400,53,Cardiologist,City,PG,Referral,3,3,1,0,1,42419,0
+SAL9082,39,Orthopedic Surgeon,City,PG,On-Campus,1,4,1,0,1,24076,1
+TECH5171,48,Nurse Practitioner,City,PG,Walk-in,1,2,0,7,0,24076,1
+HR5360,51,Pediatrician,Suburb,PG,Walk-in,5,4,0,2,1,86750,0
+MKT3502,48,Orthopedic Surgeon,Suburb,PG,On-Campus,5,4,1,4,1,86750,1
+PUR1717,40,Nurse Assistant,City,PG,Referral,2,1,0,0,1,29805,0
+HR3782,54,Nurse Assistant,Suburb,PG,Referral,5,4,1,4,0,86750,0
+MKT5946,44,Pediatrician,City,UG,Recruitment Agency,2,5,0,5,0,29805,1
+HR6486,28,Anesthesiologist,City,UG,On-Campus,4,5,1,7,1,65715,1
+PUR9335,39,Cardiologist,Suburb,UG,On-Campus,1,1,1,2,0,24076,1
+PUR5980,45,Anesthesiologist,Suburb,UG,Walk-in,4,2,1,2,0,65715,0
+TECH8266,46,Nurse Assistant,City,PG,On-Campus,5,2,1,9,0,86750,1
+SAL5491,40,General Practitioner,City,PG,Referral,4,4,0,8,1,65715,0
+HR8192,30,Orthopedic Surgeon,Suburb,PG,On-Campus,4,4,0,3,1,65715,1
+HR6588,31,Surgeon,City,UG,Walk-in,4,4,1,3,0,65715,0
+MKT8651,28,Registered Nurse,Suburb,PG,Recruitment Agency,5,2,1,6,0,86750,1
+PUR4636,27,Cardiologist,City,PG,Walk-in,4,3,0,1,0,65715,0
+HR2167,34,Registered Nurse,Suburb,PG,Walk-in,2,5,0,7,1,29805,1
+PUR2062,47,Nurse Practitioner,City,UG,Recruitment Agency,5,3,0,5,1,86750,0
+HR3156,54,General Practitioner,City,PG,Walk-in,4,3,0,2,0,65715,1
+TECH8860,51,Orthopedic Surgeon,Suburb,UG,Walk-in,5,2,0,8,0,86750,1
+SAL6161,50,Oncologist,City,UG,On-Campus,3,3,0,4,0,42419,0
+HR6305,33,Cardiologist,City,UG,On-Campus,2,1,1,7,0,29805,1
+PUR7541,47,Registered Nurse,Suburb,UG,Recruitment Agency,4,4,0,6,1,65715,0
+TECH5729,23,Registered Nurse,City,PG,On-Campus,3,1,0,7,0,42419,0
+HR8330,33,Registered Nurse,City,UG,On-Campus,3,5,1,6,1,42419,1
+MKT6334,41,General Practitioner,City,UG,Walk-in,5,4,0,2,0,86750,0
+SAL9924,31,General Practitioner,Suburb,PG,Referral,3,3,0,1,0,42419,1
+HR5330,49,Oncologist,Suburb,PG,On-Campus,2,5,0,6,0,29805,1
+TECH9010,24,Surgeon,Suburb,UG,Referral,2,4,0,2,0,29805,0
+MKT7801,34,Radiologist,City,PG,On-Campus,1,3,0,2,0,24076,1
+TECH5846,26,Radiologist,City,UG,On-Campus,2,1,1,1,1,29805,0
+TECH7731,26,Registered Nurse,City,UG,Recruitment Agency,3,4,0,3,0,42419,0
