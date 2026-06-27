@@ -84,7 +84,7 @@
         </div>
         <div>
             <div class="font-semibold text-ink mb-1">Run Clustering</div>
-            <div class="text-caption">K-Means AI</div>
+            <div class="text-caption">K-Means Clustering</div>
         </div>
     </a>
 

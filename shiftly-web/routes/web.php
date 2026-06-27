@@ -6,6 +6,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DepartmentController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\EmployeeScheduleController;
+use App\Http\Controllers\ManagerAccountController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\ShiftRequirementController;
 use Illuminate\Support\Facades\Auth;
@@ -31,6 +32,11 @@ Route::middleware(['auth', 'role:manager'])->prefix('manager')->name('manager.')
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/profile', [DashboardController::class, 'profile'])->name('profile');
     Route::put('/profile', [AuthController::class, 'updateManagerProfile'])->name('profile.update');
+    
+    Route::get('/accounts', [ManagerAccountController::class, 'index'])->name('accounts.index');
+    Route::get('/accounts/create', [ManagerAccountController::class, 'create'])->name('accounts.create');
+    Route::post('/accounts', [ManagerAccountController::class, 'store'])->name('accounts.store');
+    Route::delete('/accounts/{account}', [ManagerAccountController::class, 'destroy'])->name('accounts.destroy');
     
     Route::resource('employees', EmployeeController::class);
     Route::get('/employees-import', [EmployeeController::class, 'showImport'])->name('employees.import');

@@ -76,8 +76,8 @@
         .sidebar-manager .role-badge .role-label { color: #60A5FA; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
         .sidebar-manager .role-badge .role-name  { color: #F1F5F9; font-size: 13px; font-weight: 600; }
         .sidebar-manager .role-badge .role-email { color: #64748B; font-size: 11px; }
-        .sidebar-manager .divider-nav { height: 1px; background: rgba(255,255,255,0.07); margin: 10px 0; }
-        .sidebar-manager .section-label { color: #475569; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 12px; margin-bottom: 4px; margin-top: 10px; }
+        .sidebar-manager .divider-nav { height: 1px; background: rgba(255,255,255,0.07); margin: 10px 0 16px 0; }
+        .sidebar-manager .section-label { color: #475569; font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; padding: 0 12px; margin-bottom: 4px; margin-top: 16px; }
         .sidebar-manager .logout-btn {
             background: rgba(255,255,255,0.05);
             border: 1px solid rgba(255,255,255,0.08);
@@ -231,7 +231,7 @@
                     </a>
 
                     <div class="divider-nav"></div>
-                    <div class="section-label" style="margin-top:0;">AI Scheduling</div>
+                    <div class="section-label">AI Scheduling</div>
 
                     <a href="{{ route('manager.schedules.create') }}" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg {{ request()->routeIs('manager.schedules.create') || request()->routeIs('manager.schedules.compare') ? 'active' : '' }}">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
@@ -243,6 +243,12 @@
                     </a>
 
                     <div class="divider-nav"></div>
+                    <div class="section-label">Settings</div>
+
+                    <a href="{{ route('manager.accounts.index') }}" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg {{ request()->routeIs('manager.accounts.*') ? 'active' : '' }}">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" /></svg>
+                        <span>Manager Accounts</span>
+                    </a>
 
                     <a href="{{ route('manager.profile') }}" class="nav-item flex items-center gap-3 px-3 py-2.5 rounded-lg {{ request()->routeIs('manager.profile') ? 'active' : '' }}">
                         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
