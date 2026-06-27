@@ -173,7 +173,7 @@ class ScheduleGenerationService
             'education' => $employee->education,
             'job_level' => $employee->job_level,
             'age' => $employee->age,
-            'salary' => (float) $employee->salary,
+            'salary' => (float) $employee->salary / 12, // Convert annual to monthly
             'rating' => (float) $employee->rating,
             'certifications' => $employee->certifications,
             'cluster' => $employee->cluster_label,
