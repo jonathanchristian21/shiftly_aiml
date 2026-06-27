@@ -29,6 +29,8 @@ Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth')->n
 
 Route::middleware(['auth', 'role:manager'])->prefix('manager')->name('manager.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/profile', [DashboardController::class, 'profile'])->name('profile');
+    Route::put('/profile', [AuthController::class, 'updateManagerProfile'])->name('profile.update');
     
     Route::resource('employees', EmployeeController::class);
     Route::get('/employees-import', [EmployeeController::class, 'showImport'])->name('employees.import');
@@ -45,6 +47,7 @@ Route::middleware(['auth', 'role:manager'])->prefix('manager')->name('manager.')
     Route::get('/schedules/create', [ScheduleController::class, 'create'])->name('schedules.create');
     Route::post('/schedules/generate', [ScheduleController::class, 'generate'])->name('schedules.generate');
     Route::get('/schedules/compare', [ScheduleController::class, 'compare'])->name('schedules.compare');
+    Route::get('/schedules/compare/{candidateId}', [ScheduleController::class, 'showCandidate'])->name('schedules.candidate.show');
     Route::post('/schedules/publish', [ScheduleController::class, 'publish'])->name('schedules.publish');
     Route::get('/schedules/{schedule}', [ScheduleController::class, 'show'])->name('schedules.show');
     Route::delete('/schedules/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
@@ -53,4 +56,5 @@ Route::middleware(['auth', 'role:manager'])->prefix('manager')->name('manager.')
 Route::middleware(['auth', 'role:employee'])->prefix('employee')->name('employee.')->group(function () {
     Route::get('/schedule', [EmployeeScheduleController::class, 'schedule'])->name('schedule');
     Route::get('/profile', [EmployeeScheduleController::class, 'profile'])->name('profile');
+    Route::put('/profile', [AuthController::class, 'updateEmployeeProfile'])->name('profile.update');
 });
