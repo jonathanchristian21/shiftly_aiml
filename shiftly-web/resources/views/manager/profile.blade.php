@@ -1,10 +1,10 @@
-@extends('layouts.employee')
+@extends('layouts.manager')
 
-@section('title', 'My Profile')
+@section('title', 'Manager Profile')
 
 @section('content')
 <div class="mb-8">
-    <h1 class="text-display">My Profile</h1>
+    <h1 class="text-display">Manager Profile</h1>
 </div>
 
 @if(session('success'))
@@ -25,62 +25,30 @@
 
 <div class="card p-6 mb-6">
     <h2 class="text-title mb-4">Personal Information</h2>
-    @if($employee)
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div>
-            <label class="text-caption">Employee Code</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->employee_code }}</p>
-        </div>
-        <div>
             <label class="text-caption">Name</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->name }}</p>
+            <p class="text-body font-semibold text-ink">{{ $user->name }}</p>
         </div>
         <div>
             <label class="text-caption">Email</label>
             <p class="text-body font-semibold text-ink">{{ $user->email }}</p>
         </div>
         <div>
-            <label class="text-caption">Age</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->age }} years</p>
-        </div>
-        <div>
-            <label class="text-caption">Department</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->department->name }}</p>
-        </div>
-        <div>
-            <label class="text-caption">Education</label>
+            <label class="text-caption">Role</label>
             <p class="text-body font-semibold text-ink">
-                <span class="px-2 py-1 text-xs rounded {{ $employee->education === 'PG' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800' }}">
-                    {{ $employee->education }}
+                <span class="px-2 py-1 text-xs rounded bg-blue-100 text-blue-800">
+                    {{ ucfirst($user->role) }}
                 </span>
             </p>
         </div>
-        <div>
-            <label class="text-caption">Job Level</label>
-            <p class="text-body font-semibold text-ink">Level {{ $employee->job_level }}</p>
-        </div>
-        <div>
-            <label class="text-caption">Rating</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->rating }}/5</p>
-        </div>
-        <div>
-            <label class="text-caption">Certifications</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->certifications }}</p>
-        </div>
-        <div>
-            <label class="text-caption">Awards</label>
-            <p class="text-body font-semibold text-ink">{{ $employee->awards }}</p>
-        </div>
     </div>
-    @else
-    <p class="text-gray-600">No employee profile found.</p>
-    @endif
 </div>
 
 <!-- Change Credentials Section -->
 <div class="card p-6 mb-6">
     <h2 class="text-title mb-4">Change Credentials</h2>
-    <form method="POST" action="{{ route('employee.profile.update') }}" class="space-y-6">
+    <form method="POST" action="{{ route('manager.profile.update') }}" class="space-y-6">
         @csrf
         @method('PUT')
         
