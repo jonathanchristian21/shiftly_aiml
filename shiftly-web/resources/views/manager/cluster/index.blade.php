@@ -151,10 +151,10 @@
         <div class="border border-gray-200 rounded-lg p-5 card-hover">
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);">
-                    <span class="text-white font-bold text-lg mono">{{ $label }}</span>
+                    <span class="text-white font-bold text-lg mono">{{ $label + 1 }}</span>
                 </div>
                 <div>
-                    <div class="text-tiny">CLUSTER {{ $label }}</div>
+                    <div class="text-tiny">CLUSTER {{ $label + 1 }}</div>
                     <div class="text-2xl font-bold text-ink mono">{{ $analysis['count'] }}</div>
                     <div class="text-caption">employees</div>
                 </div>
@@ -225,16 +225,17 @@
                 <div class="text-tiny mb-2">CLUSTER INTERPRETATION</div>
                 <div class="text-caption bg-gray-50 rounded-lg p-3 mono leading-relaxed">
                     @php
-                        if ($label == 1) {
+                        $displayLabel = $label + 1;
+                        if ($displayLabel == 1) {
                             echo '<span class="text-emerald-600">● SHIFT LEADERS (A)</span><br>';
                             echo 'Senior (PG), High Level & Salary';
-                        } elseif ($label == 2) {
+                        } elseif ($displayLabel == 2) {
                             echo '<span class="text-sky">● EXECUTORS (B)</span><br>';
                             echo 'Junior (UG), Lower Level & Salary';
-                        } elseif ($label == 3) {
+                        } elseif ($displayLabel == 3) {
                             echo '<span class="text-purple-600">● STABILIZERS (C)</span><br>';
                             echo 'Mid-level, High Rating/Satisfied';
-                        } elseif ($label == 4) {
+                        } elseif ($displayLabel == 4) {
                             echo '<span class="text-amber-600">● WATCHLIST (D)</span><br>';
                             echo 'Lower Rating/Satisfied, Risk of Burnout';
                         } else {

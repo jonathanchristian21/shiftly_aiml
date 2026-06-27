@@ -44,8 +44,7 @@
             border-right: 1px solid #E5E7EB;
         }
 
-        .sidebar-employee .brand-title { color: #0D1117; font-weight: 700; }
-        .sidebar-employee .brand-sub   { color: #6B7280; font-size: 11px; }
+        .sidebar-employee .brand-title { color: #0D1117; font-weight: 800; font-size: 1.6rem; letter-spacing: -0.02em; line-height: 1; }
 
         .sidebar-employee .nav-item {
             color: #6B7280;
@@ -192,16 +191,8 @@
             <div class="p-6 flex flex-col h-full">
 
                 {{-- Brand --}}
-                <div class="flex items-center gap-3 mb-8">
-                    <div class="icon-box flex-shrink-0" style="background: linear-gradient(135deg, #10B981 0%, #059669 100%);">
-                        <svg class="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
-                    </div>
-                    <div>
-                        <div class="brand-title">Shiftly</div>
-                        <div class="brand-sub">Hospital Scheduler</div>
-                    </div>
+                <div class="mb-8 px-3">
+                    <div class="brand-title">Shiftly</div>
                 </div>
 
                 {{-- Navigation --}}

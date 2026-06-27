@@ -13,9 +13,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
+    return view('landing');
+})->name('landing');
+
+Route::get('/app', function () {
     if (Auth::check()) {
-        return Auth::user()->role === 'manager' 
-            ? redirect()->route('manager.dashboard') 
+        return Auth::user()->role === 'manager'
+            ? redirect()->route('manager.dashboard')
             : redirect()->route('employee.schedule');
     }
     return redirect()->route('login');

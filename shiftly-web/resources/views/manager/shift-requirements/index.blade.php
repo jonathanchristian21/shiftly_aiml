@@ -86,12 +86,12 @@
                     </td>
                     <td>
                         <div class="flex items-center gap-2">
-                            <a href="{{ route('manager.shift-requirements.edit', $req) }}" class="text-sky hover:text-sky-hover font-semibold text-caption">
+                            <a href="{{ route('manager.shift-requirements.edit', $req) }}" class="px-3 py-1.5 border border-gray-200 rounded-md text-sky hover:border-sky hover:bg-sky/5 font-semibold text-caption transition-colors">
                                 Edit
                             </a>
                             <form action="{{ route('manager.shift-requirements.destroy', $req) }}" method="POST" class="inline" onsubmit="return confirm('Delete this requirement?')">
                                 @csrf @method('DELETE')
-                                <button type="submit" class="text-red-500 hover:text-red-600 font-semibold text-caption">
+                                <button type="submit" class="px-3 py-1.5 border border-gray-200 rounded-md text-red-500 hover:border-red-500 hover:bg-red-50 font-semibold text-caption transition-colors">
                                     Delete
                                 </button>
                             </form>
