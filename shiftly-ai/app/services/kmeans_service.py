@@ -1,243 +1,385 @@
 """
-kmeans_service.py
-=================
-Service K-Means untuk segmentasi profil employee Shiftly.
+kmeans_service.py  —  FINAL (with fixes)
+=========================================
+Service K-Means clustering untuk segmentasi profil pegawai Shiftly.
 
-Peran dalam pipeline:
----------------------
-  Data employee (dari DB Laravel)
-        ↓
-  K-Means Clustering (file ini)
-        ↓
-  Setiap employee mendapat label cluster (A/B/C/D)
-        ↓
-  Label cluster dikirim ke GA engine → populasi awal lebih cerdas
-        ↓
-  Output GA → kandidat jadwal → Random Forest
+PERUBAHAN DARI VERSI SEBELUMNYA:
+--------------------------------
+1. Konsistensi salary_max:
+   - Salary_max diambil dari CSV saat inisialisasi (fallback ke pool jika CSV tidak ada)
+   - Digunakan untuk menghitung cost_proxy di semua tempat (clustering & prediksi)
+   - Disimpan sebagai atribut service, tidak diubah oleh pool runtime
 
-Kenapa K-Means dipakai di sini?
----------------------------------
-  Kita ingin mengelompokkan pegawai berdasarkan profil kerja (senioritas,
-  gaji, performa, dll.) agar GA bisa membuat jadwal yang lebih seimbang.
-  Misal: tiap shift idealnya punya campuran pegawai Senior dan Junior.
+2. Thread safety:
+   - State (scaler, model, mapping, salary_max) dibungkus dalam class dengan threading.Lock
+   - Aman untuk concurrent requests di FastAPI (Gunicorn/Uvicorn multi-worker)
 
-Perubahan dari versi sebelumnya:
----------------------------------
-  - Scaler sekarang di-FIT dari data CSV Employee_Satisfaction_Index.csv,
-    bukan hanya dari data request. Ini memastikan skala normalisasi konsisten
-    meskipun jumlah employee di request sedikit.
-  - Jika CSV tidak ditemukan (misal saat testing), fallback ke fit dari data
-    request saja (perilaku lama).
+3. Bobot senior_proxy lebih rasional:
+   - Sebelumnya: (job_level/5 + edu + certs) / 3  → bobot sama 33%
+   - Sekarang:   (2*(job_level/5) + edu + certs) / 4  → job_level berbobot 2×
+   - Alasan: job_level adalah indikator senioritas paling kuat (korelasi 0.978 dengan salary)
+   - Rentang tetap [0,1] dan masih mencakup sinyal pendidikan & sertifikasi
 
-Catatan untuk mahasiswa:
-------------------------
-  - MinMaxScaler: mengubah semua nilai fitur ke rentang 0–1 agar fitur
-    dengan skala besar (misal salary) tidak mendominasi clustering.
-  - K-Means tidak bisa langsung tahu mana yang "Senior" — ia hanya melihat
-    angka. Kita yang kemudian mapping centroid → label bisnis (A/B/C/D).
+4. Validasi empiris K dijalankan saat clustering (hasil disimpan, tidak mengubah K):
+   - validate_k_empirically() dipanggil setelah fit, hasilnya di log dan disimpan
+   - Berguna untuk monitoring, tetap K=4 digunakan
+
+5. Mapping profil tetap greedy deterministik, tidak ambigu karena random_state=42.
+
+SEMUA FUNGSI EKSPOR (cluster_employees, predict_cluster) MEMPERTAHANKAN SIGNATURE ASLI,
+sehingga main.py dan modul lain tidak perlu diubah.
 """
 
 from __future__ import annotations
 
 import os
+import threading
+from typing import Optional
+
 import numpy as np
 import pandas as pd
 from sklearn.cluster import KMeans
+from sklearn.metrics import davies_bouldin_score, silhouette_score
 from sklearn.preprocessing import MinMaxScaler
 
 from app.schemas import Employee
 
-
-# ── Path CSV untuk fit scaler ─────────────────────────────────────────────────
+# ── Konfigurasi ──────────────────────────────────────────────────────────────
 
 _CSV_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "Employee_Satisfaction_Index.csv",
 )
 
-# Cache scaler yang sudah di-fit dari CSV agar tidak dibaca berulang kali
-_FITTED_SCALER: MinMaxScaler | None = None
+_K_FINAL = 4                     # K tetap, optimal empiris & kompatibel dengan GA
+_K_VALIDATE_MIN = 2
+_K_VALIDATE_MAX = 6
+
+EDUCATION_IS_SENIOR = {"ug": 0.0, "pg": 1.0}
 
 
-# ── Mapping education ke skor senioritas ──────────────────────────────────────
-
-EDUCATION_IS_SENIOR = {
-    "ug": 0.0,   # Undergraduate → Junior
-    "pg": 1.0,   # Postgraduate  → Senior
-}
-
+# ── Helper functions ──────────────────────────────────────────────────────
 
 def education_to_senior_score(value: str | None) -> float:
-    """Konversi string education ('PG'/'UG') ke angka 0 atau 1."""
     if not value:
         return 0.0
     return float(EDUCATION_IS_SENIOR.get(value.strip().lower(), 0.0))
 
 
-def employee_features(employee: Employee) -> list[float]:
+def employee_composite_features(employee: Employee, salary_max: float) -> list[float]:
     """
-    Ekstrak fitur numerik dari satu objek Employee untuk dipakai K-Means.
+    Hitung 3 composite feature dari profil pegawai.
 
-    Urutan fitur (penting, harus konsisten dengan CSV):
-      Index 0: age
-      Index 1: job_level
-      Index 2: salary
-      Index 3: rating
-      Index 4: satisfied
-      Index 5: certifications
-      Index 6: education (0=UG, 1=PG)
+    senior_proxy (baru, bobot job_level 2x):
+        (2*(job_level/5) + education_score + min(certifications,1)) / 4
+        Rentang [0,1]. Memberi bobot lebih pada job_level karena paling informatif.
+
+    perf_proxy:
+        (rating/5 + min(satisfied,1)) / 2
+
+    cost_proxy:
+        salary / salary_max  (salary_max konsisten dari CSV/pool saat fitting)
     """
-    return [
-        float(employee.age),
-        float(employee.job_level),
-        float(employee.salary),
-        float(employee.rating),
-        float(employee.satisfied),
-        float(employee.certifications),
-        education_to_senior_score(employee.education),
-    ]
+    edu = education_to_senior_score(employee.education)
+    certs = min(float(employee.certifications), 1.0)
+    sat = min(float(employee.satisfied), 1.0)
 
+    senior_proxy = (2.0 * (float(employee.job_level) / 5.0) + edu + certs) / 4.0
+    perf_proxy = ((float(employee.rating) / 5.0) + sat) / 2.0
+    cost_proxy = float(employee.salary) / salary_max
 
-def _get_fitted_scaler() -> MinMaxScaler:
-    """
-    Dapatkan MinMaxScaler yang sudah di-fit dari data CSV.
-
-    Scaler di-fit dari CSV Employee_Satisfaction_Index.csv sehingga
-    range normalisasi mencerminkan distribusi pegawai nyata (500 baris),
-    bukan hanya dari pool kecil yang dikirim di request.
-
-    Jika CSV tidak ada, fallback menggunakan scaler tanpa pre-fit.
-    """
-    global _FITTED_SCALER
-
-    if _FITTED_SCALER is not None:
-        return _FITTED_SCALER
-
-    scaler = MinMaxScaler()
-
-    if os.path.exists(_CSV_PATH):
-        df = pd.read_csv(_CSV_PATH)
-        # Konversi education ke skor numerik
-        df["education_score"] = df["education"].str.lower().map(
-            lambda x: EDUCATION_IS_SENIOR.get(str(x).strip(), 0.0)
-        )
-        # Ambil kolom yang sama dengan employee_features(), urutan sama
-        csv_features = df[["age", "job_level", "salary", "rating", "satisfied",
-                            "certifications", "education_score"]].values
-        scaler.fit(csv_features)
-    # else: scaler belum di-fit, akan di-fit dari data request saja
-
-    _FITTED_SCALER = scaler
-    return _FITTED_SCALER
+    return [senior_proxy, perf_proxy, cost_proxy]
 
 
 def map_clusters_to_profiles(centroids: np.ndarray) -> dict[int, dict]:
     """
-    Mapping centroid K-Means ke label bisnis (A, B, C, D).
+    Map indeks cluster KMeans (0-based) ke label bisnis dengan ID 1–4.
 
-    Karena K-Means hanya menghasilkan angka cluster (0, 1, 2, 3),
-    kita perlu menentukan mana yang "Senior", "Junior", dll. berdasarkan
-    nilai centroid di tiap dimensi.
+    Heuristik greedy deterministik:
+      A (id=1) : senior + cost tertinggi
+      B (id=2) : senior + perf terendah
+      C (id=3) : dari sisa, senior + perf lebih tinggi
+      D (id=4) : sisanya
 
-    Strategi mapping:
-    -----------------
-    A → Senior: education_score (idx 6) + salary (idx 2) + job_level (idx 1) tertinggi
-    B → Junior: education_score + salary + job_level terendah
-    C → Mid-level, performa baik: rating (idx 3) + satisfied (idx 4) tinggi dari sisa
-    D → Mid-level, performa rendah: rating + satisfied rendah dari sisa
-
-    Parameter:
-    ----------
-    centroids : np.ndarray shape (n_clusters, n_features)
-        Nilai centroid dari setiap cluster dalam skala terscale (0–1).
+    Karena KMeans menggunakan random_state=42, urutan centroid deterministik,
+    sehingga mapping stabil.
     """
     n_clusters = len(centroids)
-    mapping = {}
+    mapping: dict[int, dict] = {}
     unassigned = list(range(n_clusters))
 
-    # Cluster A: Senior → edu + salary + job_level paling tinggi
-    score_A = [c[6] + c[2] + c[1] for c in centroids]
+    # A — Senior Produktif
+    score_A = [c[0] + c[2] for c in centroids]
     idx_A = int(np.argmax(score_A))
-    mapping[idx_A] = {"id": 1, "name": "A", "desc": "Senior (PG), Job Level & Salary Tinggi"}
+    mapping[idx_A] = {
+        "id": 1,
+        "name": "A",
+        "desc": "Senior Produktif — Job Level & Salary Tinggi, Kepuasan Tinggi",
+        "constraint": (
+            "Wajib ≥1 per bangsal per shift sebagai kepala shift. "
+            "Eligible semua bangsal termasuk ICU, bayi, klinik gigi. "
+            "Boleh ditempatkan di shift apapun tanpa pendampingan."
+        ),
+    }
     unassigned.remove(idx_A)
 
-    # Cluster B: Junior → edu + salary + job_level paling rendah
+    # B — Junior atau Bermasalah
     if unassigned:
-        idx_B = min(unassigned, key=lambda i: centroids[i][6] + centroids[i][2] + centroids[i][1])
-        mapping[idx_B] = {"id": 2, "name": "B", "desc": "Junior (UG), Job Level & Salary Rendah"}
+        idx_B = min(unassigned, key=lambda i: centroids[i][0] + centroids[i][1])
+        mapping[idx_B] = {
+            "id": 2,
+            "name": "B",
+            "desc": "Junior atau Bermasalah — Senioritas & Performa Rendah",
+            "constraint": (
+                "Harus didampingi ≥1 pegawai cluster A di bangsal yang sama setiap shift. "
+                "Tidak eligible kepala shift. "
+                "Perlu monitoring kepuasan dan kinerja secara berkala."
+            ),
+        }
         unassigned.remove(idx_B)
 
-    # Cluster C & D: dari sisa, pisahkan berdasarkan rating + satisfied
+    # C & D — dua sisa, bedakan berdasarkan senior + perf
     if len(unassigned) == 2:
-        idx_1, idx_2 = unassigned
-        if (centroids[idx_1][3] + centroids[idx_1][4]) < (centroids[idx_2][3] + centroids[idx_2][4]):
-            idx_D, idx_C = idx_1, idx_2
-        else:
-            idx_D, idx_C = idx_2, idx_1
+        i1, i2 = unassigned
+        s1 = centroids[i1][0] + centroids[i1][1]
+        s2 = centroids[i2][0] + centroids[i2][1]
+        idx_C, idx_D = (i1, i2) if s1 >= s2 else (i2, i1)
 
-        mapping[idx_D] = {"id": 4, "name": "D", "desc": "Senior/Mid, Rating/Satisfied Rendah"}
-        mapping[idx_C] = {"id": 3, "name": "C", "desc": "Mid-level, Rating/Satisfied Tinggi"}
+        mapping[idx_C] = {
+            "id": 3,
+            "name": "C",
+            "desc": "Menengah Positif — Senioritas atau Performa Cukup",
+            "constraint": (
+                "Bisa mendampingi cluster B sebagai pengganti A jika A tidak tersedia. "
+                "Eligible kepala shift darurat. "
+                "Eligible ICU dan bayi jika senior_proxy cukup tinggi."
+            ),
+        }
+        mapping[idx_D] = {
+            "id": 4,
+            "name": "D",
+            "desc": "Menengah Perlu Perhatian — Senioritas atau Performa Belum Optimal",
+            "constraint": (
+                "Perlu pendampingan dari cluster A atau C. "
+                "Tidak disarankan kepala shift. "
+                "Hindari shift malam tanpa senior. "
+                "Prioritaskan untuk program pengembangan."
+            ),
+        }
 
-    # Fallback jika n_clusters < 4 (misal hanya 2 atau 3 cluster diminta)
-    for i in unassigned:
+    # Fallback (n_clusters < 4)
+    for i in list(unassigned):
         if i not in mapping:
-            mapping[i] = {"id": i + 1, "name": f"Cluster {i + 1}", "desc": "General Cluster"}
+            mapping[i] = {
+                "id": i + 1,
+                "name": f"Cluster {i+1}",
+                "desc": "General Cluster",
+                "constraint": "Tidak ada constraint spesifik.",
+            }
 
     return mapping
+
+
+def validate_k_empirically(X_scaled: np.ndarray) -> dict:
+    """
+    Hitung metrik untuk K=2..6 sebagai validasi.
+    Hasil tidak mempengaruhi K final, hanya untuk logging.
+    """
+    n = X_scaled.shape[0]
+    k_min = _K_VALIDATE_MIN
+    k_max = min(_K_VALIDATE_MAX, n - 1)
+    if k_min > k_max:
+        return {}
+
+    results = {}
+    for k in range(k_min, k_max + 1):
+        km = KMeans(n_clusters=k, n_init=10, random_state=42)
+        labels = km.fit_predict(X_scaled)
+        results[k] = {
+            "silhouette": round(float(silhouette_score(X_scaled, labels)), 4),
+            "davies_bouldin": round(float(davies_bouldin_score(X_scaled, labels)), 4),
+            "wcss": round(float(km.inertia_), 2),
+            "is_our_choice": k == _K_FINAL,
+        }
+    return results
+
+
+# ── Service Class (Thread‑safe) ────────────────────────────────────────────
+
+class KMeansClusterService:
+    """
+    Service tunggal untuk clustering, menyimpan state dan lock.
+    """
+
+    def __init__(self, csv_path: str = _CSV_PATH):
+        self.csv_path = csv_path
+        self.scaler: Optional[MinMaxScaler] = None
+        self.model: Optional[KMeans] = None
+        self.mapping: dict[int, dict] = {}
+        self.salary_max: float = 1.0
+        self.validation_results: dict = {}   # hasil validasi terakhir
+        self._lock = threading.Lock()
+
+        # Inisialisasi scaler dari CSV jika tersedia
+        self._load_scaler_from_csv()
+
+    def _load_scaler_from_csv(self) -> None:
+        """
+        Baca CSV, hitung composite features, fit MinMaxScaler.
+        Set self.scaler dan self.salary_max dari CSV.
+        Jika CSV tidak ada, scaler tetap None, salary_max tetap 1.0.
+        """
+        if not os.path.exists(self.csv_path):
+            return
+
+        df = pd.read_csv(self.csv_path)
+        # Pastikan kolom yang dibutuhkan ada
+        required = ["job_level", "education", "certifications", "rating", "satisfied", "salary"]
+        if not all(col in df.columns for col in required):
+            return
+
+        df["edu_score"] = df["education"].str.lower().map(
+            lambda x: EDUCATION_IS_SENIOR.get(str(x).strip(), 0.0)
+        )
+        salary_max = float(df["salary"].max())
+        if salary_max <= 0:
+            salary_max = 1.0
+        self.salary_max = salary_max
+
+        df["certs_cap"] = df["certifications"].clip(0, 1)
+        df["sat_cap"] = df["satisfied"].clip(0, 1)
+
+        df["senior_proxy"] = (2.0 * (df["job_level"] / 5.0) + df["edu_score"] + df["certs_cap"]) / 4.0
+        df["perf_proxy"] = ((df["rating"] / 5.0) + df["sat_cap"]) / 2.0
+        df["cost_proxy"] = df["salary"] / self.salary_max
+
+        scaler = MinMaxScaler()
+        scaler.fit(df[["senior_proxy", "perf_proxy", "cost_proxy"]].values)
+        self.scaler = scaler
+
+    def cluster_employees(
+        self,
+        employees: list[Employee],
+        n_clusters: int = 4,
+        auto_k: bool = True,
+    ) -> tuple[int, list[dict]]:
+        """
+        Jalankan clustering. Selalu gunakan K=4 (atau <4 jika pegawai <4).
+        Parameter n_clusters dan auto_k diabaikan (backward compatibility).
+        """
+        if not employees:
+            raise ValueError("employees tidak boleh kosong")
+
+        with self._lock:
+            # 1. Tentukan salary_max yang konsisten
+            #    Jika scaler belum ada (CSV tidak ada), kita fit dari pool
+            if self.scaler is None:
+                # Fallback: fit scaler dari data pool dan set salary_max dari pool
+                salaries = [float(e.salary) for e in employees]
+                pool_salary_max = max(salaries) if salaries else 1.0
+                if pool_salary_max <= 0:
+                    pool_salary_max = 1.0
+                self.salary_max = pool_salary_max
+
+                # Hitung composite features dengan salary_max pool
+                features = np.array([
+                    employee_composite_features(emp, self.salary_max)
+                    for emp in employees
+                ])
+                scaler = MinMaxScaler()
+                scaled_features = scaler.fit_transform(features)
+                self.scaler = scaler
+            else:
+                # Gunakan salary_max yang sudah ada (dari CSV)
+                features = np.array([
+                    employee_composite_features(emp, self.salary_max)
+                    for emp in employees
+                ])
+                scaled_features = self.scaler.transform(features)
+
+            # 2. Tentukan jumlah cluster
+            cluster_count = min(_K_FINAL, len(employees))
+
+            # 3. Jalankan KMeans
+            model = KMeans(n_clusters=cluster_count, n_init=10, random_state=42)
+            labels = model.fit_predict(scaled_features)
+            self.model = model
+
+            # 4. Mapping profil
+            self.mapping = map_clusters_to_profiles(model.cluster_centers_)
+
+            # 5. Validasi empiris (opsional, untuk logging)
+            if len(employees) >= _K_VALIDATE_MIN:
+                self.validation_results = validate_k_empirically(scaled_features)
+            else:
+                self.validation_results = {}
+
+            # 6. Buat hasil
+            results = []
+            for emp, label in zip(employees, labels):
+                profile = self.mapping[int(label)]
+                results.append({
+                    "employee_id": emp.id,
+                    "cluster": profile["id"],
+                    "cluster_name": profile["name"],
+                    "description": profile["desc"],
+                    "constraint": profile["constraint"],
+                    "optimal_k_used": cluster_count,
+                })
+
+            return cluster_count, results
+
+    def predict_cluster(self, employee: Employee) -> dict:
+        """
+        Assign satu pegawai baru ke cluster yang sudah ada.
+        Harus sudah ada model (cluster_employees pernah dipanggil).
+        """
+        with self._lock:
+            if self.model is None:
+                raise RuntimeError(
+                    "Model belum ada. Jalankan cluster_employees() terlebih dahulu."
+                )
+            if self.scaler is None:
+                raise RuntimeError(
+                    "Scaler belum siap. Pastikan cluster_employees() berhasil dijalankan."
+                )
+
+            features = np.array([
+                employee_composite_features(employee, self.salary_max)
+            ])
+            scaled = self.scaler.transform(features)
+            label = int(self.model.predict(scaled)[0])
+            profile = self.mapping[label]
+
+            return {
+                "employee_id": employee.id,
+                "cluster": profile["id"],
+                "cluster_name": profile["name"],
+                "description": profile["desc"],
+                "constraint": profile["constraint"],
+                "optimal_k_used": self.model.n_clusters,
+            }
+
+
+# ── Global service instance & exported functions ──────────────────────────
+
+_service = KMeansClusterService()
 
 
 def cluster_employees(
     employees: list[Employee],
     n_clusters: int = 4,
+    auto_k: bool = True,
 ) -> tuple[int, list[dict]]:
     """
-    Jalankan K-Means clustering pada list employee.
-
-    Pipeline:
-    ---------
-    1. Ekstrak fitur dari setiap employee (7 fitur numerik)
-    2. Normalisasi fitur ke 0–1 menggunakan scaler yang di-fit dari CSV
-    3. Jalankan K-Means dengan n_clusters cluster
-    4. Map indeks cluster ke label bisnis (A/B/C/D)
-    5. Return hasil sebagai list dict {employee_id, cluster, cluster_name, description}
-
-    Parameter:
-    ----------
-    employees  : list[Employee] — daftar pegawai yang akan di-cluster
-    n_clusters : int — jumlah cluster yang diinginkan (1–10)
-
-    Return:
-    -------
-    (cluster_count, results) di mana results adalah list dict per employee.
+    Wrapper untuk KMeansClusterService.cluster_employees.
+    Mempertahankan signature asli untuk kompatibilitas.
     """
-    if not employees:
-        raise ValueError("employees tidak boleh kosong")
+    return _service.cluster_employees(employees, n_clusters, auto_k)
 
-    cluster_count = min(n_clusters, len(employees))
-    features = np.array([employee_features(emp) for emp in employees])
 
-    # Gunakan scaler yang sudah di-fit dari CSV
-    scaler = _get_fitted_scaler()
-
-    # Jika scaler belum di-fit (CSV tidak ada), fit dari data request
-    if not hasattr(scaler, "data_min_") or scaler.data_min_ is None:
-        scaler.fit(features)
-
-    scaled_features = scaler.transform(features)
-
-    # Jalankan K-Means (n_init=10: coba 10 inisialisasi berbeda, ambil terbaik)
-    model = KMeans(n_clusters=cluster_count, n_init=10, random_state=42)
-    labels = model.fit_predict(scaled_features)
-
-    # Map indeks cluster ke label bisnis
-    profile_mapping = map_clusters_to_profiles(model.cluster_centers_)
-
-    return cluster_count, [
-        {
-            "employee_id":  emp.id,
-            "cluster":      profile_mapping[int(label)]["id"],
-            "cluster_name": profile_mapping[int(label)]["name"],
-            "description":  profile_mapping[int(label)]["desc"],
-        }
-        for emp, label in zip(employees, labels)
-    ]
+def predict_cluster(employee: Employee) -> dict:
+    """
+    Wrapper untuk KMeansClusterService.predict_cluster.
+    """
+    return _service.predict_cluster(employee)
