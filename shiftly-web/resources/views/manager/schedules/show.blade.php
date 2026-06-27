@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.manager')
 
 @section('title', 'Schedule Detail')
 
@@ -59,7 +59,6 @@
                     <th>EMPLOYEE</th>
                     <th>DEPARTMENT</th>
                     <th>SHIFT</th>
-                    <th>CLUSTER</th>
                     <th>SENIOR</th>
                 </tr>
             </thead>
@@ -76,12 +75,11 @@
                         <td class="text-caption">{{ $entry->department->name }}</td>
                         <td>
                             <span class="badge badge-{{ 
-                                $entry->shift === 'Pagi' ? 'warning' : 
-                                ($entry->shift === 'Sore' ? 'primary' : 
-                                ($entry->shift === 'Malam' ? 'secondary' : 'success')) 
+                                $entry->shift === 'Pagi' ? 'danger' : 
+                                ($entry->shift === 'Sore' ? 'warning' : 
+                                ($entry->shift === 'Malam' ? 'primary' : 'success')) 
                             }}">{{ $entry->shift }}</span>
                         </td>
-                        <td class="font-mono text-caption">{{ $entry->cluster_label !== null ? 'C' . $entry->cluster_label : '-' }}</td>
                         <td class="text-caption">{{ $entry->is_senior_snapshot ? 'Yes' : 'No' }}</td>
                     </tr>
                     @endforeach

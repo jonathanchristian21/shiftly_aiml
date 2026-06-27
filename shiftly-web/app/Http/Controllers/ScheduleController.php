@@ -150,6 +150,35 @@ class ScheduleController extends Controller
         return view('manager.schedules.compare', compact('candidates', 'poolInfo'));
     }
 
+    public function showCandidate($candidateId)
+    {
+        $candidates = session('schedule_candidates', []);
+        $poolInfo = session('schedule_pool_info', []);
+
+        $candidate = collect($candidates)->firstWhere('candidate_id', $candidateId);
+
+        if (!$candidate) {
+            return redirect()->route('manager.schedules.compare')
+                ->with('error', 'Candidate not found.');
+        }
+
+        // Enrich assignments with employee and department names
+        $enrichedCandidate = $candidate;
+        $employeeIds = collect($candidate['assignments'])->pluck('employee_id')->unique();
+        $departmentIds = collect($candidate['assignments'])->pluck('department_id')->unique();
+        
+        $employees = Employee::whereIn('id', $employeeIds)->get()->keyBy('id');
+        $departments = Department::whereIn('id', $departmentIds)->get()->keyBy('id');
+        
+        $enrichedCandidate['assignments'] = collect($candidate['assignments'])->map(function($assignment) use ($employees, $departments) {
+            $assignment['employee_name'] = $employees[$assignment['employee_id']]->name ?? 'Employee #' . $assignment['employee_id'];
+            $assignment['department_name'] = $departments[$assignment['department_id']]->name ?? 'Dept #' . $assignment['department_id'];
+            return $assignment;
+        })->toArray();
+
+        return view('manager.schedules.candidate-detail', compact('enrichedCandidate', 'poolInfo'));
+    }
+
     public function publish(Request $request)
     {
         $validated = $request->validate([
