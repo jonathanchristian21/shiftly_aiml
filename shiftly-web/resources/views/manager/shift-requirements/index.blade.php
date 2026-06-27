@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.manager')
 
 @section('title', 'Shift Requirements')
 
@@ -57,9 +57,9 @@
                     <td class="font-semibold text-ink">{{ $req->department->name }}</td>
                     <td>
                         <span class="badge 
-                            {{ $req->shift === 'Pagi' ? 'badge-warning' : '' }}
-                            {{ $req->shift === 'Sore' ? 'badge-primary' : '' }}
-                            {{ $req->shift === 'Malam' ? 'badge-secondary' : '' }}">
+                            {{ $req->shift === 'Pagi' ? 'badge-danger' : '' }}
+                            {{ $req->shift === 'Sore' ? 'badge-warning' : '' }}
+                            {{ $req->shift === 'Malam' ? 'badge-primary' : '' }}">
                             {{ $req->shift }}
                         </span>
                     </td>
@@ -157,7 +157,7 @@
                         <div class="border border-gray-200 rounded-lg p-4">
                             <label class="flex items-center gap-3 mb-3 cursor-pointer">
                                 <input type="checkbox" name="shifts[0][enabled]" value="1" class="w-5 h-5" checked>
-                                <span class="badge badge-warning">PAGI</span>
+                                <span class="badge badge-danger">PAGI</span>
                                 <span class="text-caption">(Morning Shift)</span>
                             </label>
                             <div class="grid grid-cols-2 gap-4 ml-8">
@@ -176,7 +176,7 @@
                         <div class="border border-gray-200 rounded-lg p-4">
                             <label class="flex items-center gap-3 mb-3 cursor-pointer">
                                 <input type="checkbox" name="shifts[1][enabled]" value="1" class="w-5 h-5" checked>
-                                <span class="badge badge-primary">SORE</span>
+                                <span class="badge badge-warning">SORE</span>
                                 <span class="text-caption">(Afternoon Shift)</span>
                             </label>
                             <div class="grid grid-cols-2 gap-4 ml-8">
@@ -195,7 +195,7 @@
                         <div class="border border-gray-200 rounded-lg p-4">
                             <label class="flex items-center gap-3 mb-3 cursor-pointer">
                                 <input type="checkbox" name="shifts[2][enabled]" value="1" class="w-5 h-5" checked>
-                                <span class="badge badge-secondary">MALAM</span>
+                                <span class="badge badge-primary">MALAM</span>
                                 <span class="text-caption">(Night Shift)</span>
                             </label>
                             <div class="grid grid-cols-2 gap-4 ml-8">

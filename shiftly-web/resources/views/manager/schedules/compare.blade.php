@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.manager')
 
 @section('title', 'Compare Schedules')
 
@@ -48,16 +48,25 @@
                         <span class="badge badge-warning">S:{{ $candidate['summary']['soft_violation_count'] }}</span>
                     </td>
                     <td>
-                        <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline" onsubmit="return confirm('Publish this schedule?')">
-                            @csrf
-                            <input type="hidden" name="candidate_id" value="{{ $candidate['candidate_id'] }}">
-                            <button type="submit" class="btn btn-success btn-sm">
+                        <div class="flex gap-2">
+                            <a href="{{ route('manager.schedules.candidate.show', substr($candidate['candidate_id'], -3)) }}" class="btn btn-secondary btn-sm">
                                 <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                 </svg>
-                                <span>PUBLISH</span>
-                            </button>
-                        </form>
+                                <span>VIEW</span>
+                            </a>
+                            <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline" onsubmit="return confirm('Publish this schedule?')">
+                                @csrf
+                                <input type="hidden" name="candidate_id" value="{{ $candidate['candidate_id'] }}">
+                                <button type="submit" class="btn btn-success btn-sm">
+                                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                    <span>PUBLISH</span>
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 @endforeach

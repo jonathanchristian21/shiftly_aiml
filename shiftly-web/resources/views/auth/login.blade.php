@@ -91,7 +91,7 @@
                     </svg>
                 </div>
                 <h1 style="font-size: 28px; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 4px;">Shiftly</h1>
-                <p class="version">Hospital Scheduling System v1.0</p>
+                <p class="version">Hospital Scheduling System</p>
             </div>
 
             @if($errors->any())
@@ -113,24 +113,10 @@
                     <input type="password" name="password" required style="width: 100%;">
                 </div>
 
-                <div style="margin-bottom: 20px; display: flex; align-items: center;">
-                    <input type="checkbox" name="remember" id="remember" style="width: 16px; height: 16px; margin-right: 8px; padding: 0;">
-                    <label for="remember" style="font-size: 13px; color: #6E6E73; margin: 0;">Keep me signed in</label>
-                </div>
-
-                <button type="submit" class="btn-login" style="width: 100%; cursor: pointer;">
+                <button type="submit" class="btn-login" style="width: 100%; cursor: pointer; margin-top: 20px;">
                     SIGN IN
                 </button>
             </form>
-            
-            <div style="text-align: center; padding-top: 16px; border-top: 1px solid rgba(0,0,0,0.06);">
-                <div style="font-size: 11px; color: #86868B; line-height: 1.6;">
-                    <div style="margin-bottom: 4px;">Default Manager:</div>
-                    <code style="background: #F5F5F7; padding: 2px 8px; border-radius: 4px; font-size: 10px;">manager@shiftly.com</code>
-                    <span style="margin: 0 6px; color: #D1D1D6;">•</span>
-                    <code style="background: #F5F5F7; padding: 2px 8px; border-radius: 4px; font-size: 10px;">password</code>
-                </div>
-            </div>
         </div>
     </div>
 </body>

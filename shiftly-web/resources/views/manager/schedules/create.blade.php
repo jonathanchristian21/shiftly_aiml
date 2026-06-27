@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.manager')
 
 @section('title', 'Generate Schedule')
 
@@ -91,7 +91,7 @@
             </select>
             <select id="filterCluster" class="text-caption">
                 <option value="">All Clusters</option>
-                @for($i = 0; $i <= 9; $i++)
+                @for($i = 1; $i <= 4; $i++)
                     <option value="{{ $i }}">{{ $i }}</option>
                 @endfor
             </select>

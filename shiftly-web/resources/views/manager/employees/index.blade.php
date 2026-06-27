@@ -1,4 +1,4 @@
-@extends('layouts.app')
+@extends('layouts.manager')
 
 @section('title', 'Employees')
 
@@ -61,7 +61,7 @@
             <label class="text-tiny mb-2">Cluster</label>
             <select name="cluster" class="w-full">
                 <option value="">All Clusters</option>
-                @for($i = 0; $i <= 9; $i++)
+                @for($i = 1; $i <= 4; $i++)
                     <option value="{{ $i }}" {{ request('cluster') == $i ? 'selected' : '' }}>Cluster {{ $i }}</option>
                 @endfor
             </select>
