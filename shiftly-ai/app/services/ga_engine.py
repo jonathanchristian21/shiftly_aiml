@@ -242,6 +242,18 @@ def _select_staff_cluster_aware(
     seniors = [e for e in available if _is_senior(e)]
     juniors = [e for e in available if not _is_senior(e)]
 
+    # ROTASI SHIFT: Shuffle setiap pool agar pegawai tidak selalu mendapat
+    # shift yang sama setiap hari. Prioritas TIER tetap dipertahankan
+    # (senior/cluster-A → C → B → fallback → D), tapi siapa dalam tiap tier
+    # dipilih secara ACAK sehingga shift terdistribusi merata antar pegawai.
+    rng.shuffle(cluster_a)
+    rng.shuffle(cluster_b)
+    rng.shuffle(cluster_c)
+    rng.shuffle(cluster_d)
+    rng.shuffle(no_cluster)
+    rng.shuffle(seniors)
+    rng.shuffle(juniors)
+
     # PERF: gunakan set id (O(1) membership) + counter senior, bukan
     # `emp not in selected` (O(n) value-equality scan pada pydantic model)
     # dan `len([... for e in selected if _is_senior(e)])` (O(n) per-iterasi).
@@ -250,8 +262,8 @@ def _select_staff_cluster_aware(
     selected_senior_count = 0
 
     # 1. Pilih senior untuk kepala shift (HARD CONSTRAINT)
+    # Pool sudah di-shuffle — tidak perlu sort agar rotasi benar-benar acak
     senior_pool = cluster_a if cluster_a else seniors
-    senior_pool.sort(key=lambda e: (e.salary, -e.rating, e.id))
 
     for emp in senior_pool:
         if selected_senior_count >= required_senior:
@@ -262,8 +274,7 @@ def _select_staff_cluster_aware(
             if _is_senior(emp):
                 selected_senior_count += 1
 
-    # 2. Isi sisa dengan Cluster C (stabilizers)
-    cluster_c.sort(key=lambda e: (-e.rating, -e.satisfied, e.salary, e.id))
+    # 2. Isi sisa dengan Cluster C (stabilizers) — shuffled, tidak di-sort
     for emp in cluster_c:
         if len(selected) >= required_staff:
             break
@@ -271,8 +282,7 @@ def _select_staff_cluster_aware(
             selected.append(emp)
             selected_ids.add(emp.id)
 
-    # 3. Isi dengan Cluster B (cost-efficient)
-    cluster_b.sort(key=lambda e: (e.salary, -e.rating, e.id))
+    # 3. Isi dengan Cluster B (cost-efficient) — shuffled, tidak di-sort
     for emp in cluster_b:
         if len(selected) >= required_staff:
             break
@@ -280,9 +290,9 @@ def _select_staff_cluster_aware(
             selected.append(emp)
             selected_ids.add(emp.id)
 
-    # 4. Isi dengan no cluster atau senior lain
+    # 4. Isi dengan no cluster atau senior lain — sudah di-shuffle sebelumnya
     remaining = [e for e in (no_cluster + seniors + juniors) if e.id not in selected_ids]
-    remaining.sort(key=lambda e: (e.salary, -e.rating, e.id))
+    rng.shuffle(remaining)
 
     for emp in remaining:
         if len(selected) >= required_staff:
@@ -294,8 +304,7 @@ def _select_staff_cluster_aware(
     # 5. FALLBACK: Cluster D (watchlist) hanya jika SANGAT terpaksa
     # Hindari cluster D di shift malam atau shift berat
     if len(selected) < required_staff and cluster_d:
-        cluster_d.sort(key=lambda e: (e.rating, e.satisfied, -e.salary, e.id))
-        # Hanya ambil jika shift bukan malam ATAU sangat terpaksa
+        # Pool cluster_d sudah di-shuffle di atas
         if shift != "Malam" or len(selected) < required_staff * 0.7:
             for emp in cluster_d:
                 if len(selected) >= required_staff:
@@ -422,19 +431,15 @@ def _initial_chromosome_cluster_aware(
     )
 
     for day_index in range(request.days):
-        # ── PRIORITY ORDER per hari (bukan shuffle) ───────────────────────
-        # Shift Malam diproses PERTAMA karena butuh senior dan staf terbatas.
-        # Jika Pagi/Sore diproses dulu, mereka bisa "mengambil" employee senior
-        # yang seharusnya untuk Malam → slot Malam shortage.
-        # Urutan deterministik: Malam → Pagi → Sore.
-        day_requirements = sorted(
-            requirements,
-            key=lambda req: (
-                {"Malam": 0, "Pagi": 1, "Sore": 2}.get(req.shift, 3),
-                -req.required_senior,
-                -req.required_staff,
-            )
-        )
+        # ── PRIORITY ORDER per hari dengan VARIASI ACAK ───────────────────
+        # Shift Malam tetap diproses PERTAMA (butuh senior, staf terbatas).
+        # Pagi dan Sore diurutkan ACAK per hari agar tidak selalu shift yang
+        # sama mendapat "sisa" pegawai — ini mendorong rotasi shift yang merata.
+        pagi_sore = [req for req in requirements if req.shift in ("Pagi", "Sore")]
+        malam_reqs = [req for req in requirements if req.shift == "Malam"]
+        other_reqs = [req for req in requirements if req.shift not in ("Pagi", "Sore", "Malam")]
+        rng.shuffle(pagi_sore)  # acak urutan Pagi vs Sore per hari
+        day_requirements = malam_reqs + pagi_sore + other_reqs
 
         for requirement in day_requirements:
             dept_pool = active_pool.get(requirement.department_id, [])
