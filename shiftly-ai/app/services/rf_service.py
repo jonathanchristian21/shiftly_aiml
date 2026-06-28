@@ -134,12 +134,15 @@ def evaluate_candidates(
     )
     raw_rf  = model.predict(X)
 
-    # Rescale RF ke [10, 100] — tidak pernah 0
-    rf_min, rf_max = raw_rf.min(), raw_rf.max()
-    if rf_max - rf_min < 1e-6:
-        rf_scores = np.full(len(raw_rf), 55.0)
-    else:
-        rf_scores = 10.0 + (raw_rf - rf_min) / (rf_max - rf_min) * 90.0
+    # Pakai raw RF prediction langsung (tidak di-rescale)
+    # Formula profit_score sudah dikalibrasi ke range 0-85 dari data aktual:
+    #   Ideal (H:0, cluster tinggi, cost rendah) → ~70-85
+    #   Bagus (H:0, cluster sedang)              → ~50-65
+    #   Sedang                                   → ~30-50
+    #   Ada hard violation                        → <10
+    # Floor 5 ditambahkan agar tidak pernah tampil 0 di UI
+    # (nilai 0 bisa menyesatkan — beda antara "buruk" dan "tidak terhitung")
+    rf_scores = np.clip(raw_rf, 5.0, 100.0)
 
     # Normalisasi GA fitness ke [0, 100]
     ga_vals = np.array([c.summary.ga_fitness for c in candidates])
@@ -161,15 +164,18 @@ def evaluate_candidates(
 
         evaluated.append(EvaluatedCandidate(
             **data,
-            rf_profit_score=round(float(rf_s), 2),
+            rf_profit_score=round(float(rf_s), 4),   # 4 desimal agar tidak kembar
             predicted_salary=round(float(total_sal), 2),
-            final_score=round(float(fin_s), 2),
+            final_score=round(float(fin_s), 4),       # 4 desimal untuk konsistensi
         ))
 
         print(
             f"  [RF] {c.candidate_id}: "
-            f"rf={rf_s:.1f}%  ga_norm={ga_n:.1f}  "
-            f"final={fin_s:.1f}  salary=${total_sal:,.0f}"
+            f"rf={rf_s:.4f}%  ga_norm={ga_n:.2f}  "
+            f"final={fin_s:.4f}  salary=${total_sal:,.0f}"
         )
 
-    return sorted(evaluated, key=lambda c: c.final_score, reverse=True)
+    # Urutan kandidat TIDAK diubah — tetap C1, C2, C3 seperti dari GA.
+    # Label BEST ditentukan di frontend berdasarkan final_score tertinggi,
+    # bukan berdasarkan posisi baris (index 0).
+    return evaluated

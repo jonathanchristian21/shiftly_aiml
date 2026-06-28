@@ -128,72 +128,83 @@ def load_employees(csv_path: str) -> list[Employee]:
 
 def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -> float:
     """
-    Hitung profit_score (0-100) berdasarkan formula bisnis yang defensible.
+    Hitung profit_score (0-100) per kandidat jadwal.
+
+    Formula dikalibrasi dari range AKTUAL komponen di data GA nyata:
+      cluster_balance : 0.65 - 0.95
+      avg_dept_weight : 0.99 - 1.11  (Tier 1=1.5, Tier2=1.0, Tier3=0.6, rata2 ~1.05)
+      cost_ratio      : 0.70 - 1.03
+      soft_ratio      : 0.14 - 0.20
+      dayoff_ratio    : 0.29 - 0.47
+      hard_violation  : 0 - 11
+      ntm_ratio       : 0.00 - 0.02
 
     KOMPONEN:
     ---------
-    revenue_proxy (max 40 poin):
-      coverage_rate = shift yang terpenuhi / total shift yang dibutuhkan
-      dept_weight   = rata-rata bobot tier dept dari pegawai aktif
-      → Jadwal yang menutupi semua shift kritis (Tier 1) lebih profitable
+    base (30): semua jadwal valid dapat base score — hindari score 0 untuk
+               kondisi normal karena semua kandidat pasti punya soft violation.
 
-    cost_proxy (max 30 poin, penalti):
-      Dibandingkan benchmark salary harian × jumlah assignment aktif
-      → Jadwal yang lebih hemat dari benchmark dapat penalti lebih kecil
+    cluster_reward (0-35): cluster_balance tinggi = distribusi shift merata
+                           = lebih efisien & fair → komponen terpenting profitabilitas.
 
-    risk_proxy (penalti dari violations dan shift berbahaya):
-      hard_violation      × 8    (wajib 0, setiap pelanggaran sangat mahal)
-      soft_violation_ratio× 10   (normalized per assignment)
-      dayoff_viol_ratio   × 7    (pegawai butuh istirahat)
-      night_to_morning    × 5    (risiko kelelahan dan kesalahan medis)
+    dept_weight_reward (0-15): dept tier tinggi (spesialis) = nilai layanan lebih tinggi
+                               = revenue potensial lebih besar.
+
+    cost_penalty (0-15): cost_ratio tinggi = biaya di atas benchmark → profit turun.
+                         Dinormalisasi ke range aktual (0.70-1.03).
+
+    hard_penalty (×5): setiap hard violation = layanan tidak terpenuhi → revenue hilang.
+
+    soft_penalty (0-8): dinormalisasi ke range aktual (0.14-0.20) agar perbedaan
+                        antar kandidat tetap terlihat meski semua punya soft violation.
+
+    dayoff_penalty (0-7): dinormalisasi ke range aktual (0.29-0.47).
+
+    ntm_penalty (0-3): malam→pagi = kelelahan → risiko kesalahan medis.
+
+    TARGET RANGE (dikalibrasi dari data aktual):
+      Ideal  (hard=0, cluster≥0.90, cost rendah)    → 70-85
+      Bagus  (hard=0, cluster≥0.80, cost sedang)    → 50-65
+      Sedang (hard=0, cluster≥0.75, cost tinggi)    → 30-50
+      Rendah (hard=0, cluster rendah, semua buruk)  → 10-25
+      Ada hard violation (hard≥1)                   →  0-10
     """
-    s = candidate.summary
-
-    # ── Revenue proxy ──────────────────────────────────────────────────────
-    # Hitung coverage: berapa slot shift yang terpenuhi
-    total_required  = sum(r["required_staff"] * 3 for r in requirements)  # 3 shift/hari
-    total_required  = max(total_required, 1)
-    # Gunakan total_assignments sebagai proxy coverage (sudah memenuhi requirement)
-    coverage_rate   = min(1.0, s.total_assignments / max(total_required, 1))
+    s            = candidate.summary
+    total_assign = max(s.total_assignments, 1)
+    active_ids   = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
 
     # Rata-rata dept_weight pegawai aktif
-    active_ids      = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
-    dept_weights    = []
+    dept_weights = []
     for eid in active_ids:
-        emp = employees_by_id.get(eid)
-        if emp:
-            tier = DEPT_TIER.get(emp.department or "", 3)
-            dept_weights.append(TIER_WEIGHT[tier])
-        else:
-            dept_weights.append(1.0)
+        emp  = employees_by_id.get(eid)
+        tier = DEPT_TIER.get(emp.department or "", 3) if emp else 3
+        dept_weights.append(TIER_WEIGHT[tier])
     avg_dept_weight = float(np.mean(dept_weights)) if dept_weights else 1.0
 
-    revenue_proxy   = coverage_rate * avg_dept_weight * 40.0
+    # Hitung komponen dari salary_calculator
+    sal_feats    = compute_candidate_salary_features(candidate, employees_by_id)
+    actual_total = sal_feats["estimated_total_salary"]
+    cost_ratio   = actual_total / max(BENCHMARK_DAILY_PER_EMP_USD * total_assign, 1)
+    ntm_ratio    = sal_feats["night_to_morning_count"] / total_assign
+    soft_ratio   = s.soft_violation_count / total_assign
+    dayoff_ratio = s.weekly_day_off_violations / total_assign
+    cluster      = float(s.cluster_balance)
 
-    # ── Cost proxy ─────────────────────────────────────────────────────────
-    sal_feats       = compute_candidate_salary_features(candidate, employees_by_id)
-    actual_total    = sal_feats["estimated_total_salary"]
-    active_assign   = max(sal_feats.get("night_shift_count", 0) + 1, s.total_assignments, 1)
-    benchmark_total = BENCHMARK_DAILY_PER_EMP_USD * active_assign
-    cost_ratio      = actual_total / max(benchmark_total, 1)
-    # cost_ratio > 1 = lebih mahal dari benchmark → penalti lebih besar
-    cost_proxy      = min(30.0, cost_ratio * 15.0)
+    # ── REWARD ────────────────────────────────────────────────────────────
+    base           = 30.0
+    cluster_reward = float(np.clip(((cluster - 0.65) / 0.30) * 35, 0, 35))
+    dw_reward      = float(np.clip(((avg_dept_weight - 0.99) / 0.12) * 15, 0, 15))
 
-    # ── Risk proxy ─────────────────────────────────────────────────────────
-    total_assign        = max(s.total_assignments, 1)
-    soft_ratio          = s.soft_violation_count / total_assign
-    dayoff_ratio        = s.weekly_day_off_violations / total_assign
-    night_count         = s.shift_counts.get("Malam", 0)
-    ntm_ratio           = sal_feats["night_to_morning_count"] / total_assign
+    # ── PENALTY ───────────────────────────────────────────────────────────
+    cost_penalty   = float(np.clip(((cost_ratio - 0.70) / 0.33) * 15, 0, 15))
+    hard_penalty   = s.hard_violation_count * 5.0
+    soft_penalty   = float(np.clip(((soft_ratio - 0.14) / 0.06) * 8, 0, 8))
+    dayoff_penalty = float(np.clip(((dayoff_ratio - 0.28) / 0.19) * 7, 0, 7))
+    ntm_penalty    = float(np.clip((ntm_ratio / 0.02) * 3, 0, 3))
 
-    risk_proxy = (
-        s.hard_violation_count * 8.0
-        + soft_ratio           * 10.0
-        + dayoff_ratio         * 7.0
-        + ntm_ratio            * 5.0
-    )
-
-    score = revenue_proxy - cost_proxy - risk_proxy
+    score = (base + cluster_reward + dw_reward
+             - cost_penalty - hard_penalty
+             - soft_penalty - dayoff_penalty - ntm_penalty)
     return float(np.clip(score, 0.0, 100.0))
 
 
