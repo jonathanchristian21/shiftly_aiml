@@ -3,8 +3,6 @@ kmeans_service.py  —  FINAL (with fixes)
 =========================================
 Service K-Means clustering untuk segmentasi profil pegawai Shiftly.
 
-PERUBAHAN DARI VERSI SEBELUMNYA:
---------------------------------
 1. Konsistensi salary_max:
    - Salary_max diambil dari CSV saat inisialisasi (fallback ke pool jika CSV tidak ada)
    - Digunakan untuk menghitung cost_proxy di semua tempat (clustering & prediksi)
@@ -15,8 +13,7 @@ PERUBAHAN DARI VERSI SEBELUMNYA:
    - Aman untuk concurrent requests di FastAPI (Gunicorn/Uvicorn multi-worker)
 
 3. Bobot senior_proxy lebih rasional:
-   - Sebelumnya: (job_level/5 + edu + certs) / 3  → bobot sama 33%
-   - Sekarang:   (2*(job_level/5) + edu + certs) / 4  → job_level berbobot 2×
+   - (2*(job_level/5) + edu + certs) / 4  → job_level berbobot 2×
    - Alasan: job_level adalah indikator senioritas paling kuat (korelasi 0.978 dengan salary)
    - Rentang tetap [0,1] dan masih mencakup sinyal pendidikan & sertifikasi
 
@@ -25,9 +22,6 @@ PERUBAHAN DARI VERSI SEBELUMNYA:
    - Berguna untuk monitoring, tetap K=4 digunakan
 
 5. Mapping profil tetap greedy deterministik, tidak ambigu karena random_state=42.
-
-SEMUA FUNGSI EKSPOR (cluster_employees, predict_cluster) MEMPERTAHANKAN SIGNATURE ASLI,
-sehingga main.py dan modul lain tidak perlu diubah.
 """
 
 from __future__ import annotations
@@ -51,14 +45,14 @@ _CSV_PATH = os.path.join(
     "Employee_Satisfaction_Index.csv",
 )
 
-_K_FINAL = 4                     # K tetap, optimal empiris & kompatibel dengan GA
+_K_FINAL = 4
 _K_VALIDATE_MIN = 2
 _K_VALIDATE_MAX = 6
 
 EDUCATION_IS_SENIOR = {"ug": 0.0, "pg": 1.0}
 
 
-# ── Helper functions ──────────────────────────────────────────────────────
+# ── Helper functions ──────────────────────────────────────────────────────────────
 
 def education_to_senior_score(value: str | None) -> float:
     if not value:
@@ -104,12 +98,14 @@ def map_clusters_to_profiles(centroids: np.ndarray) -> dict[int, dict]:
     Karena KMeans menggunakan random_state=42, urutan centroid deterministik,
     sehingga mapping stabil.
     """
+
     n_clusters = len(centroids)
     mapping: dict[int, dict] = {}
     unassigned = list(range(n_clusters))
 
     # A — Senior Produktif
-    score_A = [c[0] + c[2] for c in centroids]
+    score_A = [c[0] + c[2] for c in centroids] 
+    # cara kerja score A: menentukan cluster A dengan menjumlahkan senior_proxy (c[0]) dan cost_proxy (c[2]) dari setiap centroid. Cluster dengan skor tertinggi akan dianggap sebagai cluster A, yang mewakili pegawai senior dan produktif dengan biaya tinggi.
     idx_A = int(np.argmax(score_A))
     mapping[idx_A] = {
         "id": 1,
@@ -126,6 +122,7 @@ def map_clusters_to_profiles(centroids: np.ndarray) -> dict[int, dict]:
     # B — Junior atau Bermasalah
     if unassigned:
         idx_B = min(unassigned, key=lambda i: centroids[i][0] + centroids[i][1])
+        # cara kerja score B: menentukan cluster B dengan mencari indeks cluster yang memiliki jumlah senior_proxy (c[0]) dan perf_proxy (c[1]) terendah. Cluster ini mewakili pegawai yang lebih junior atau memiliki performa rendah, sehingga perlu pendampingan dari cluster A.
         mapping[idx_B] = {
             "id": 2,
             "name": "B",
@@ -144,7 +141,7 @@ def map_clusters_to_profiles(centroids: np.ndarray) -> dict[int, dict]:
         s1 = centroids[i1][0] + centroids[i1][1]
         s2 = centroids[i2][0] + centroids[i2][1]
         idx_C, idx_D = (i1, i2) if s1 >= s2 else (i2, i1)
-
+        # cara kerja score C & D: dari dua cluster yang tersisa, cluster dengan jumlah senior_proxy (c[0]) dan perf_proxy (c[1]) lebih tinggi akan dianggap sebagai cluster C, sedangkan yang lebih rendah akan menjadi cluster D. Cluster
         mapping[idx_C] = {
             "id": 3,
             "name": "C",
@@ -383,3 +380,80 @@ def predict_cluster(employee: Employee) -> dict:
     Wrapper untuk KMeansClusterService.predict_cluster.
     """
     return _service.predict_cluster(employee)
+
+if __name__ == "__main__":
+    import sys
+    import os
+    import csv
+    from collections import Counter
+    
+    # Menerima nama file CSV secara dinamis dari ketikan terminal
+    csv_filename = sys.argv[1] if len(sys.argv) > 1 else "data_pegawai.csv"
+    
+    print("=" * 60)
+    print("        SHIFTLY — K-Means Clustering Node Test")
+    print("=" * 60)
+    
+    if not os.path.exists(csv_filename):
+        print(f"[!] Error: File '{csv_filename}' tidak ditemukan.")
+        print("    Cara Jalankan: python -m app.services.kmeans_service <nama_file.csv>")
+        print("=" * 60)
+    else:
+        employees = []
+        try:
+            print(f"[1/4] Memuat data dari: {os.path.abspath(csv_filename)}")
+            with open(csv_filename, mode='r', encoding='utf-8') as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    raw_id = row['emp_id']
+                    numeric_id = ''.join(filter(str.isdigit, raw_id))
+                    numeric_id = int(numeric_id) if numeric_id else 0
+
+                    emp = Employee(
+                        id=numeric_id,
+                        age=int(row['age']),
+                        job_level=int(row['job_level']),
+                        salary=float(row['salary']),
+                        rating=float(row['rating']),
+                        satisfied=int(row['satisfied']),
+                        certifications=int(row['certifications']),
+                        education=row['education'],
+                        department_id=1
+                    )
+                    employees.append(emp)
+            
+            total_rows = len(employees)
+            print(f"      → Berhasil mengekstrak {total_rows} baris data pegawai.")
+            
+            print("[2/4] Mengeksekusi pipeline K-Means (n_clusters=4, n_init=10)...")
+            count, results = cluster_employees(employees, n_clusters=4)
+            
+            # Menghitung distribusi cluster untuk statistik
+            cluster_counts = Counter([res['cluster_name'] for res in results])
+            
+            print(f"[3/4] Clustering Selesai! Berhasil memetakan ke {count} Profil.")
+            print("\n      ── Statistik Distribusi Klaster ──")
+            for cluster_name in sorted(cluster_counts.keys()):
+                cnt = cluster_counts[cluster_name]
+                pct = (cnt / total_rows) * 100
+                bar = "█" * int(pct / 2)
+                print(f"      {cluster_name} : {cnt:<4} pegawai ({pct:>5.1f}%) {bar}")
+            
+            print("\n[4/4] Menyajikan Sampel Hasil Pemetaan (5 Baris Teratas):")
+            print("-" * 60)
+            print(f"{'Emp ID':<10} | {'Cluster ID':<10} | {'Operational Profile':<20}")
+            print("-" * 60)
+            
+            for res in results[:5]:
+                print(f"{res['employee_id']:<10} | {res['cluster']:<10} | {res['cluster_name']:<20}")
+                
+            print("-" * 60)
+            print("✓ Berhasil! Output terstruktur siap diintegrasikan ke Laravel.")
+            print("=" * 60)
+                
+        except KeyError as e:
+            print(f"\n[!] Error Format: Kolom {e} tidak ditemukan di file '{csv_filename}'.")
+            print("=" * 60)
+        except Exception as e:
+            print(f"\n[!] Terjadi kesalahan teknis: {e}")
+            print("=" * 60)

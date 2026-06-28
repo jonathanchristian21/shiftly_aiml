@@ -58,7 +58,7 @@ class ClusterController extends Controller
 
     public function startClustering(Request $request)
     {
-        // Kita kunci secara otomatis ke 4 cluster
+        // Jadikan 4 cluster karena sesuai dengan 4 Profil Operasional (A, B, C, D)
         $nClusters = 4;
 
         $employees = Employee::active()->get();
