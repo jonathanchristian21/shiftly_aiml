@@ -35,7 +35,7 @@
                         <th>ACTIVE EMPS</th>
                         <th>ASSIGNMENTS</th>
                         <th>VIOLATIONS</th>
-                        <th>ACTION</th>
+                        <th>ACTIONS</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -60,21 +60,22 @@
                         @endphp
                         <tr class="{{ $isBest ? 'bg-green-50' : '' }}">
                             <td>
-                                <span
-                                    class="badge badge-secondary font-mono">{{ $candidate['candidate_id'] }}</span>
-                                @if($isBest)
-                                    <span class="badge badge-success ml-1 text-xs">BEST</span>
-                                @endif
+                                <div class="flex items-center gap-2">
+                                    <span class="badge badge-secondary font-mono">{{ $candidate['candidate_id'] }}</span>
+                                    @if($isBest)
+                                        <span class="badge badge-success text-xs">BEST</span>
+                                    @endif
+                                </div>
                             </td>
                             <td class="font-mono font-semibold">
-                                {{ number_format($candidate['summary']['ga_fitness'], 2) }}
+                                {{ number_format($candidate['summary']['ga_fitness'], 2, '.', ',') }}
                             </td>
                             <td
                                 class="font-mono font-semibold {{ $rfScore >= 70 ? 'text-green-600' : ($rfScore >= 40 ? 'text-yellow-600' : 'text-orange-500') }}">
-                                {{ number_format($rfScore, 4) }}
+                                {{ number_format($rfScore, 2, '.', ',') }}
                             </td>
                             <td class="font-mono font-semibold {{ $isBest ? 'text-green-700' : 'text-gray-700' }}">
-                                {{ number_format($finalScore, 4) }}
+                                {{ number_format($finalScore, 2, '.', ',') }}
                             </td>
                             {{--
                             Total Salary dalam USD (sesuai satuan data CSV salary).
@@ -97,18 +98,30 @@
                                 <span class="badge badge-warning">S:{{ $candidate['summary']['soft_violation_count'] }}</span>
                             </td>
                             <td>
-                                <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline"
-                                    onsubmit="return confirm('Publish this schedule?')">
-                                    @csrf
-                                    <input type="hidden" name="candidate_id" value="{{ $candidate['candidate_id'] }}">
-                                    <button type="submit" class="btn btn-success btn-sm">
+                                <div class="flex items-center gap-2">
+                                    <a href="{{ route('manager.schedules.candidate.show', ['candidateId' => $candidate['candidate_id']]) }}"
+                                        class="btn btn-secondary btn-sm">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                                         </svg>
-                                        <span>PUBLISH</span>
-                                    </button>
-                                </form>
+                                        <span>VIEW</span>
+                                    </a>
+                                    <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline"
+                                        onsubmit="return confirm('Publish this schedule?')">
+                                        @csrf
+                                        <input type="hidden" name="candidate_id" value="{{ $candidate['candidate_id'] }}">
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                            </svg>
+                                            <span>PUBLISH</span>
+                                        </button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
                     @endforeach
