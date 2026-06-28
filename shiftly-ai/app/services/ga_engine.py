@@ -706,9 +706,40 @@ def _fitness(
     # Penalti hard jauh lebih besar dari soft → GA utamakan hard constraint dulu.
     # Reward bisa mendorong fitness melebihi BASE_FITNESS jika semua slot terpenuhi
     # dengan distribusi cluster yang merata (kasus ideal).
+    #
+    # FIX SKALA BESAR (500 emp × 31 hari):
+    # Formula lama: fitness = BASE - penalty + reward
+    # Masalah: penalty bisa >> BASE_FITNESS pada input besar.
+    # Contoh: 500 emp, 31 hari, 10 slot shortage/hari → penalty = 10×150×31 = 46,500
+    #         fitness = 10000 - 46500 = -36500 → clamp ke 0.
+    #
+    # Solusi: normalisasi penalty terhadap skala masalah (worst-case).
+    # Fitness selalu dalam range [BASE×0.01 ... BASE×2], tidak pernah 0.
+    n_slots = max(total_req_slots, 1)
+    n_employees = max(len(chromosome), 1)
+
+    max_hard_pen = n_slots * (W_STAFF_SHORTAGE + W_SENIOR_SHORTAGE)
+    max_soft_pen = (
+        n_employees * request.days * W_MALAM_PAGI
+        + n_employees * max(request.days // 7, 1) * W_WEEKLY_DAY_OFF
+        + n_slots * W_JUNIOR_MENTORING
+    )
+    max_opt_pen = (
+        n_employees * W_ACTIVE_EMPLOYEE
+        + n_employees * request.days * W_ASSIGNMENT
+        + n_employees * 15.0 * W_SALARY_PER_MILLION
+    )
+    max_total_pen = max(max_hard_pen + max_soft_pen + max_opt_pen, 1.0)
+
     penalty_total = pen_hard + pen_soft + pen_optimization
-    fitness       = BASE_FITNESS - penalty_total + reward
-    fitness       = max(0.0, min(BASE_FITNESS * 2, fitness))
+    penalty_ratio = min(1.0, penalty_total / max_total_pen)
+
+    max_reward = W_CLUSTER_BALANCE_REWARD + W_SHIFT_COVERAGE_REWARD
+    reward_ratio = min(1.0, reward / max(max_reward, 1.0))
+
+    FLOOR_RATIO = 0.01  # minimum 1% BASE → fitness tidak pernah 0
+    fitness_ratio = max(FLOOR_RATIO, 1.0 - penalty_ratio + reward_ratio * 0.2)
+    fitness = round(max(BASE_FITNESS * FLOOR_RATIO, min(BASE_FITNESS * 2.0, BASE_FITNESS * fitness_ratio)), 4)
     metrics = {
         "hard_violation_count": hard_violation_count,
         "soft_violation_count": soft_violation_count,
@@ -1228,9 +1259,17 @@ def generate_candidates(request: GenerateScheduleRequest) -> list[ScheduleCandid
         seen_signatures.add(signature)
         unique_candidates.append((score, chromosome))
 
-    # Sort by fitness (descending) dan ambil top N
+    # Ambil top N berdasarkan fitness (untuk memastikan N kandidat TERBAIK diambil),
+    # tapi ACAK urutannya sebelum di-assign ID — sehingga C1 tidak selalu yang terbaik.
+    # Ini membuat compare table lebih adil dan tidak bias ke C1.
     unique_candidates.sort(key=lambda item: item[0], reverse=True)
     top_candidates = unique_candidates[: request.candidates]
+
+    # Shuffle urutan tampilan agar kandidat-kandidat yang ditampilkan
+    # tidak selalu berurutan dari terbaik ke terburuk (C1 ≠ best by default).
+    # Random seed berbeda dari seed GA agar shuffle tidak deterministik.
+    display_rng = random.Random(request.seed + 999)
+    display_rng.shuffle(top_candidates)
 
     # ── Convert to ScheduleCandidate ───────────────────────────────────
     return [
