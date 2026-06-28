@@ -160,8 +160,8 @@
                 lebih sedikit pelanggaran jadwal (hard &amp; soft constraint)</div>
 
             <div><strong>RF Score (0–100):</strong> Prediksi profitabilitas operasional absolut dari Random Forest,
-                berdasarkan 12 fitur jadwal: coverage rate, dept tier weight, certified ratio, senior ratio,
-                night ratio, malam→pagi ratio, cost ratio, cluster balance, hard violation count,
+                berdasarkan fitur jadwal seperti coverage rate, dept tier weight, certified ratio, senior ratio,
+                night ratio, malam→pagi ratio, cost ratio, hard violation count,
                 soft violation ratio, dayoff violation ratio, dan avg job level.
                 Nilai ini <strong>tidak relatif antar kandidat</strong> - dua jadwal yang sama-sama baik
                 bisa mendapat skor yang sama. Panduan: ≥70 = sangat baik, 40–70 = baik, &lt;40 = perlu perhatian.
