@@ -42,10 +42,10 @@ class ClusterController extends Controller
                 $clusterAnalysis[$cluster->cluster_label] = [
                     'count' => $employees->count(),
                     'avg_age' => round($employees->avg('age'), 1),
-                    'avg_salary' => round($employees->avg('salary'), 2),
+                    'avg_salary' => round($employees->avg('salary') / 12, 2), // Convert annual to monthly for display
                     'avg_job_level' => round($employees->avg('job_level'), 1),
                     'avg_rating' => round($employees->avg('rating'), 1),
-                    'avg_satisfied' => round($employees->avg('satisfied'), 1), // DIKIRIM KE VIEW AGAR TIDAK ERROR
+                    'avg_satisfied' => round($employees->avg('satisfied'), 1),
                     'avg_certifications' => round($employees->avg('certifications'), 1),
                     'pg_percentage' => round(($employees->where('education', 'PG')->count() / $totalEmp) * 100, 1),
                     'senior_count' => $employees->where('is_senior', true)->count(),
@@ -68,28 +68,25 @@ class ClusterController extends Controller
         }
 
         try {
-            $payload = [
-                'employees' => $employees->map(fn($emp) => [
-                    'id' => $emp->id,
-                    'name' => $emp->name,
-                    'department_id' => $emp->department_id,
-                    'education' => $emp->education,
-                    'job_level' => $emp->job_level,
-                    'age' => $emp->age,
-                    'salary' => (float) $emp->salary,
-                    'rating' => (float) $emp->rating,
-                    'satisfied' => (int) $emp->satisfied, // WAJIB DIKIRIM KE AI
-                    'certifications' => $emp->certifications,
-                ])->toArray(),
-                'n_clusters' => $nClusters,
-            ];
+            $employeePayload = $employees->map(fn($emp) => [
+                'id' => $emp->id,
+                'name' => $emp->name,
+                'department_id' => $emp->department_id,
+                'education' => $emp->education,
+                'job_level' => $emp->job_level,
+                'age' => $emp->age,
+                'salary' => (float) $emp->salary / 12, // Convert annual to monthly for consistency
+                'rating' => (float) $emp->rating,
+                'satisfied' => (int) $emp->satisfied,
+                'certifications' => $emp->certifications,
+            ])->toArray();
 
-            $response = $this->aiService->cluster($payload);
+            $response = $this->aiService->clusterEmployees($employeePayload, $nClusters);
 
             DB::beginTransaction();
             foreach ($response['clusters'] as $cluster) {
                 Employee::where('id', $cluster['employee_id'])->update([
-                    'cluster_label' => $cluster['cluster'], // 1, 2, 3, atau 4
+                    'cluster_label' => $cluster['cluster'],
                     'clustered_at' => now(),
                 ]);
             }

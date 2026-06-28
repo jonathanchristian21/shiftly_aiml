@@ -29,10 +29,13 @@ class ShiftlyAiService
             ->json();
     }
 
-    public function cluster(array $payload): array
+    public function clusterEmployees(array $employees, int $clusters = 3): array
     {
         return $this->client()
-            ->post('/cluster', $payload)
+            ->post('/cluster', [
+                'employees' => $employees,
+                'n_clusters' => $clusters,
+            ])
             ->throw()
             ->json();
     }

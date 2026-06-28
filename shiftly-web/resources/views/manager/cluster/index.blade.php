@@ -225,17 +225,17 @@
                 <div class="text-tiny mb-2">CLUSTER INTERPRETATION</div>
                 <div class="text-caption bg-gray-50 rounded-lg p-3 mono leading-relaxed">
                     @php
-                        $displayLabel = $label + 1;
-                        if ($displayLabel == 1) {
+                        // Label cluster di database adalah 1,2,3,4
+                        if ($label == 1) {
                             echo '<span class="text-emerald-600">● SHIFT LEADERS (A)</span><br>';
                             echo 'Senior (PG), High Level & Salary';
-                        } elseif ($displayLabel == 2) {
+                        } elseif ($label == 2) {
                             echo '<span class="text-sky">● EXECUTORS (B)</span><br>';
                             echo 'Junior (UG), Lower Level & Salary';
-                        } elseif ($displayLabel == 3) {
+                        } elseif ($label == 3) {
                             echo '<span class="text-purple-600">● STABILIZERS (C)</span><br>';
                             echo 'Mid-level, High Rating/Satisfied';
-                        } elseif ($displayLabel == 4) {
+                        } elseif ($label == 4) {
                             echo '<span class="text-amber-600">● WATCHLIST (D)</span><br>';
                             echo 'Lower Rating/Satisfied, Risk of Burnout';
                         } else {
