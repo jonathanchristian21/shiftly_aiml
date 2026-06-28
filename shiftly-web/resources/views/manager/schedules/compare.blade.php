@@ -105,7 +105,7 @@
                             </td>
                             <td>
                                 <div class="flex items-center gap-2">
-                                    <a href="{{ route('manager.schedules.candidate.show', ['candidateId' => $candidate['candidate_id']]) }}"
+                                    <a href="{{ route('manager.schedules.candidate.show', ['schedule' => $schedule, 'candidateCode' => $candidate['candidate_id']]) }}"
                                         class="btn btn-secondary btn-sm">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -115,7 +115,7 @@
                                         </svg>
                                         <span>VIEW</span>
                                     </a>
-                                    <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline"
+                                    <form method="POST" action="{{ route('manager.schedules.publish', $schedule) }}" class="inline"
                                         onsubmit="return confirm('Publish this schedule?')">
                                         @csrf
                                         <input type="hidden" name="candidate_id" value="{{ $candidate['candidate_id'] }}">
