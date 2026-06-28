@@ -256,8 +256,27 @@ def extract_schedule_features(candidate, employees_by_id: dict) -> dict:
     soft_ratio   = s.soft_violation_count / total_assign
     dayoff_ratio = s.weekly_day_off_violations / total_assign
 
+    # Fitur diferensial baru
+    n_active          = max(len(active_ids), 1)
+    n_days_est        = max(total_assign // max(n_active, 1), 1)
+    assignment_density= total_assign / max(n_active * n_days_est, 1)
+
+    senior_ids        = set(eid for eid in active_ids
+                           if employees_by_id.get(eid)
+                           and (employees_by_id[eid].education or "").upper() == "PG")
+    req_senior_slots  = sum(1 for r in candidate.constraint_reports if r.required_senior > 0)
+    filled_sr_slots   = sum(1 for r in candidate.constraint_reports
+                            if r.required_senior > 0 and r.actual_senior >= r.required_senior)
+    senior_cov_rate   = filled_sr_slots / max(req_senior_slots, 1)
+
+    salary_per_active = sal_feats["estimated_total_salary"] / n_active
+
+    night_asgns       = [a for a in candidate.assignments if a.shift == "Malam"]
+    sr_at_night       = sum(1 for a in night_asgns if a.employee_id in senior_ids)
+    night_sr_ratio    = sr_at_night / max(len(senior_ids) * n_days_est, 1)
+
     return {
-        "coverage_rate":           min(1.0, s.active_employees / max(len(active_ids), 1)),
+        "coverage_rate":           min(1.0, s.active_employees / n_active),
         "avg_dept_weight":         m(dept_weights),
         "certified_ratio":         m(certs),
         "senior_ratio":            m(seniors),
@@ -269,43 +288,85 @@ def extract_schedule_features(candidate, employees_by_id: dict) -> dict:
         "soft_violation_ratio":    soft_ratio,
         "dayoff_violation_ratio":  dayoff_ratio,
         "avg_job_level":           m(job_levels),
+        "assignment_density":      assignment_density,
+        "senior_coverage_rate":    senior_cov_rate,
+        "salary_per_active_emp":   salary_per_active,
+        "night_senior_ratio":      night_sr_ratio,
     }
 
 FEATURE_NAMES = [
+    # Fitur absolut
     "coverage_rate", "avg_dept_weight", "certified_ratio", "senior_ratio",
     "night_ratio", "night_to_morning_ratio", "cost_ratio", "cluster_balance",
     "hard_violation_count", "soft_violation_ratio", "dayoff_violation_ratio",
     "avg_job_level",
+    # Fitur diferensial (lebih diskriminatif antar kandidat)
+    "assignment_density",    # total_assignments / (active_employees x days)
+    "senior_coverage_rate",  # pct slot senior yang terpenuhi
+    "salary_per_active_emp", # total_salary / active_employees
+    "night_senior_ratio",    # senior yang kena malam / total senior aktif
 ]
 
 
 # ── STEP 4: Build training dataset dari hasil GA ──────────────────────────────
 
-def build_dataset(all_employees: list[Employee], n_rounds: int = 40) -> tuple[np.ndarray, np.ndarray]:
+def build_dataset(all_employees: list[Employee], n_rounds: int = 60) -> tuple[np.ndarray, np.ndarray]:
     """
     Generate dataset training dengan menjalankan GA berkali-kali
     menggunakan variasi subset employee dan requirements.
 
     KENAPA variasi:
       Supaya RF belajar dari kondisi jadwal yang beragam:
-      - Sedikit vs banyak pegawai
+      - Sedikit vs banyak pegawai (termasuk skenario 300-500 employee)
       - Dominasi Tier 1 vs Tier 3
-      - Jadwal 7 hari vs 14 hari
-      Tanpa variasi, RF hanya tahu satu skenario dan tidak bisa generalisasi.
+      - Jadwal 7, 14, hingga 31 hari (sesuai kondisi produksi)
+      Tanpa variasi skenario besar, RF tidak bisa menilai jadwal 31 hari
+      dengan benar dan cenderung memberi skor rendah untuk semua kandidat.
 
-    n_rounds=40 → 40 × 3 kandidat = 120 baris minimum.
+    DISTRIBUSI ROUNDS (n_rounds=60):
+      - 40% small  : 12–30% employee, 7–14 hari  (kondisi kecil, baseline)
+      - 35% medium : 30–70% employee, 14–21 hari  (kondisi menengah)
+      - 25% large  : 70–100% employee, 21–31 hari (kondisi produksi nyata)
+
+    60 rounds × 3 kandidat = 180 baris — cukup untuk RF belajar pola besar.
     """
     rng      = np.random.default_rng(42)
     X_list, y_list = [], []
     total    = len(all_employees)
 
-    print(f"\n[BUILD DATASET] {n_rounds} rounds × 3 kandidat...")
+    # Distribusi skenario
+    n_small  = int(n_rounds * 0.40)
+    n_medium = int(n_rounds * 0.35)
+    n_large  = n_rounds - n_small - n_medium
 
-    for r in range(n_rounds):
-        seed = r * 13 + 7
+    scenarios = (
+        [("small",  r) for r in range(n_small)]
+        + [("medium", r) for r in range(n_medium)]
+        + [("large",  r) for r in range(n_large)]
+    )
+    rng.shuffle(scenarios)
 
-        # Variasi subset: 20-100% dari total employee
-        size    = int(rng.integers(max(12, total // 5), total + 1))
+    print(f"\n[BUILD DATASET] {n_rounds} rounds × 3 kandidat "
+          f"(small={n_small}, medium={n_medium}, large={n_large})...")
+
+    for round_idx, (scenario, r) in enumerate(scenarios):
+        seed = round_idx * 13 + 7
+
+        # Tentukan ukuran subset dan jumlah hari berdasarkan skenario
+        if scenario == "small":
+            size_min = max(12, int(total * 0.12))
+            size_max = max(size_min + 1, int(total * 0.30))
+            day_choices = [7, 7, 14]           # lebih sering 7 hari
+        elif scenario == "medium":
+            size_min = max(20, int(total * 0.30))
+            size_max = max(size_min + 1, int(total * 0.70))
+            day_choices = [14, 14, 21]
+        else:  # large
+            size_min = max(30, int(total * 0.70))
+            size_max = total
+            day_choices = [21, 28, 31, 31]     # lebih sering 31 hari
+
+        size    = int(rng.integers(size_min, size_max + 1))
         indices = rng.choice(total, size=size, replace=False)
         subset  = [all_employees[i] for i in indices]
 
@@ -313,17 +374,22 @@ def build_dataset(all_employees: list[Employee], n_rounds: int = 40) -> tuple[np
         for emp in subset:
             emp.cluster = (emp.job_level - 1) % 4 + 1
 
-        # Variasi hari: 7 atau 14
-        n_days = int(rng.choice([7, 14]))
+        n_days = int(rng.choice(day_choices))
 
         # Requirements dari dept unik di subset
+        # Untuk skenario besar, staff per shift lebih banyak
         dept_ids = list(set(e.department_id for e in subset))
         reqs     = []
         req_list = []
         for did in dept_ids:
-            cnt   = sum(1 for e in subset if e.department_id == did)
-            staff = max(1, min(3, cnt // 4))
-            senior= 1 if did == 1 else 0
+            cnt = sum(1 for e in subset if e.department_id == did)
+            if scenario == "large":
+                staff = max(2, min(8, cnt // 6))
+            elif scenario == "medium":
+                staff = max(1, min(5, cnt // 5))
+            else:
+                staff = max(1, min(3, cnt // 4))
+            senior = 1 if did == 1 else 0
             for sh in ["Pagi", "Sore", "Malam"]:
                 reqs.append(DepartmentShiftRequirement(
                     department_id=did, shift=sh,
@@ -349,7 +415,8 @@ def build_dataset(all_employees: list[Employee], n_rounds: int = 40) -> tuple[np
             emp_map    = {e.id: e for e in subset}
 
             scores = [compute_profit_score(c, emp_map, req_list) for c in candidates]
-            print(f"  Round {r+1:2d}/{n_rounds}: {size} emps | {n_days}d | scores={[round(s,1) for s in scores]}")
+            print(f"  [{scenario:6s}] Round {round_idx+1:2d}/{n_rounds}: "
+                  f"{size:4d} emps | {n_days:2d}d | scores={[round(s,1) for s in scores]}")
 
             for c, score in zip(candidates, scores):
                 feats = extract_schedule_features(c, emp_map)
@@ -357,7 +424,7 @@ def build_dataset(all_employees: list[Employee], n_rounds: int = 40) -> tuple[np
                 y_list.append(score)
 
         except Exception as e:
-            print(f"  Round {r+1:2d}/{n_rounds}: SKIP — {e}")
+            print(f"  [{scenario:6s}] Round {round_idx+1:2d}/{n_rounds}: SKIP — {e}")
 
     X = np.array(X_list)
     y = np.array(y_list)
@@ -473,9 +540,9 @@ def main():
         emp.cluster = (emp.job_level - 1) % 4 + 1
 
     print("\n[STEP 2-3] Build training dataset dari GA...")
-    X, y = build_dataset(employees, n_rounds=40)
+    X, y = build_dataset(employees, n_rounds=60)
 
-    if len(X) < 30:
+    if len(X) < 50:
         print("Dataset terlalu kecil, tambah n_rounds")
         sys.exit(1)
 
