@@ -167,7 +167,11 @@ def evaluate_candidates(
     employees_by_id: dict[int, Employee] | None = None,
 ) -> list[EvaluatedCandidate]:
     """
-    Evaluasi kandidat, return sorted by final_score DESC.
+    Evaluasi kandidat, return DALAM URUTAN ASLI (C1, C2, C3, ...).
+
+    Urutan kandidat TIDAK diubah — C1 tetap baris 1, C2 baris 2, dst.
+    BEST dan LEAST RECOMMENDED ditentukan di blade berdasarkan final_score,
+    sehingga label bisa jatuh di baris mana saja (tidak harus C1 = BEST).
 
     RF score: raw prediction dari model, floor 5 (tidak pernah 0).
     final_score = GA fitness norm (50%) + RF score (50%).
@@ -231,4 +235,6 @@ def evaluate_candidates(
             f"salary=${total_sal:,.0f}"
         )
 
-    return sorted(evaluated, key=lambda c: c.final_score, reverse=True)
+    # Kembalikan dalam urutan ASLI (C1, C2, C3, ...) — TIDAK di-sort.
+    # Blade yang menentukan mana BEST/LEAST berdasarkan final_score.
+    return evaluated

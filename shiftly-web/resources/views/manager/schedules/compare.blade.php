@@ -41,29 +41,35 @@
                 <tbody>
                     @php
                         /*
-                         * Cari candidate_id dengan final_score tertinggi SEBELUM loop.
-                         * Tidak bisa pakai $index === 0 lagi karena urutan kandidat
-                         * tidak lagi diurutkan by final_score dari Python —
-                         * urutan tetap C1, C2, C3 seperti dari GA.
+                         * Kandidat datang dari Python sudah dalam urutan C1, C2, C3, C4, C5
+                         * (diversity selection — bukan sorted by score).
+                         * Label BEST dan LEAST RECOMMENDED ditentukan di sini berdasarkan
+                         * final_score: BEST = tertinggi, LEAST = terendah.
+                         * Baris tabel TIDAK diurutkan ulang — C1 tetap baris 1, dst.
                          */
-                        $bestCandidateId = collect($candidates)
-                            ->sortByDesc(fn($c) => $c['final_score'] ?? 0)
-                            ->first()['candidate_id'] ?? null;
+                        $sorted = collect($candidates)->sortByDesc(fn($c) => $c['final_score'] ?? 0);
+                        $bestCandidateId  = $sorted->first()['candidate_id'] ?? null;
+                        $leastCandidateId = $sorted->last()['candidate_id'] ?? null;
+                        // Jika hanya 1 kandidat, tidak ada "least"
+                        if (count($candidates) <= 1) $leastCandidateId = null;
                     @endphp
 
                     @foreach($candidates as $candidate)
                         @php
                             $isBest    = $candidate['candidate_id'] === $bestCandidateId;
-                            $finalScore = $candidate['final_score'] ?? 0;
-                            $rfScore    = $candidate['rf_profit_score'] ?? 0;
+                            $isLeast   = $candidate['candidate_id'] === $leastCandidateId;
+                            $finalScore  = $candidate['final_score'] ?? 0;
+                            $rfScore     = $candidate['rf_profit_score'] ?? 0;
                             $totalSalary = $candidate['summary']['total_salary'] ?? 0;
                         @endphp
-                        <tr class="{{ $isBest ? 'bg-green-50' : '' }}">
+                        <tr class="{{ $isBest ? 'bg-green-50' : ($isLeast ? 'bg-red-50' : '') }}">
                             <td>
                                 <div class="flex items-center gap-2">
                                     <span class="badge badge-secondary font-mono">{{ $candidate['candidate_id'] }}</span>
                                     @if($isBest)
                                         <span class="badge badge-success text-xs">BEST</span>
+                                    @elseif($isLeast)
+                                        <span class="badge badge-danger text-xs">LEAST RECOMMENDED</span>
                                     @endif
                                 </div>
                             </td>
@@ -138,22 +144,27 @@
             <div class="flex gap-2">
                 <span class="badge badge-success text-xs shrink-0 mt-0.5">BEST</span>
                 <div>
-                    <strong>Best Candidate</strong> dipilih berdasarkan
-                    <span class="font-semibold text-gray-800">Final Score</span> tertinggi,
-                    yang merupakan kombinasi dari dua dimensi:
-                    <ul class="mt-1 ml-4 space-y-0.5 list-disc">
-                        <li><strong>GA Fitness (50%)</strong> — kualitas operasional: seberapa baik jadwal memenuhi
-                            constraint shift, senior coverage, dan cluster balance</li>
-                        <li><strong>RF Profit Score (50%)</strong> — kualitas finansial: prediksi profitabilitas berdasarkan
-                            komposisi SDM, biaya shift, dan risiko operasional</li>
-                    </ul>
+                    <strong>Best Candidate</strong> — kandidat dengan
+                    <span class="font-semibold text-gray-800">Final Score tertinggi</span>,
+                    gabungan GA Fitness (kualitas operasional) dan RF Profit Score (kualitas finansial):
                     <div class="mt-1 font-mono text-xs bg-gray-100 rounded px-2 py-1 inline-block">
                         Final Score = (GA Fitness norm &times; 50%) + (RF Profit Score &times; 50%)
                     </div>
                     <p class="mt-1 text-xs text-gray-500">
-                        Label BEST tidak selalu jatuh di C1 — kandidat mana pun bisa menjadi BEST
-                        tergantung hasil evaluasi RF terhadap jadwal yang dihasilkan GA.
+                        Label ini bisa jatuh di baris mana pun (C1–C5) — urutan baris tidak menentukan kualitas.
                     </p>
+                </div>
+            </div>
+
+            <div class="flex gap-2">
+                <span class="badge badge-danger text-xs shrink-0 mt-0.5">LEAST RECOMMENDED</span>
+                <div>
+                    <strong>Least Recommended</strong> — kandidat dengan
+                    <span class="font-semibold text-gray-800">Final Score terendah</span> di antara semua kandidat.
+                    Bukan berarti jadwal ini buruk secara absolut — hanya yang paling rendah
+                    relatif dalam batch ini. Jika semua kandidat berkualitas baik (H:0, RF score tinggi),
+                    label ini hanya menandai yang sedikit lebih rendah dari yang lain.
+                    Hindari mempublish jadwal ini jika ada alternatif yang lebih baik.
                 </div>
             </div>
 
