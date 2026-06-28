@@ -52,4 +52,27 @@ class ShiftlyAiService
             ->throw()
             ->json();
     }
+
+    /**
+     * Generate jadwal dengan GA lalu langsung evaluasi dengan Random Forest.
+     *
+     * Endpoint ini menerima payload yang sama dengan /generate-schedules,
+     * dan secara otomatis mengalirkan hasilnya ke RF dengan data employees
+     * yang SAMA (bukan fallback default).
+     *
+     * Mengapa satu endpoint lebih baik daripada dua panggilan terpisah?
+     * - Data employees dikirim SEKALI, dipakai oleh GA dan RF.
+     * - RF mendapat data asli (age, job_level, education, dll.) untuk
+     *   setiap employee, sehingga prediksi salary akurat dan rf_profit_score
+     *   benar-benar mencerminkan komposisi tim di jadwal tersebut.
+     * - Menghindari bug: jika dua panggilan terpisah, employees bisa terlupa
+     *   dikirim ke RF (penyebab rf_profit_score = 0%).
+     */
+    public function generateAndEvaluate(array $payload): array
+    {
+        return $this->client()
+            ->post('/generate-and-evaluate', $payload)
+            ->throw()
+            ->json();
+    }
 }
