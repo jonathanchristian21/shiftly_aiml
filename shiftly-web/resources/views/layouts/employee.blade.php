@@ -37,7 +37,7 @@
         .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
 
         /* ═══════════════════════════════════════════
-           EMPLOYEE SIDEBAR — Clean White / Personal
+           EMPLOYEE SIDEBAR - Clean White / Personal
         ═══════════════════════════════════════════ */
         .sidebar-employee {
             background: #FFFFFF;

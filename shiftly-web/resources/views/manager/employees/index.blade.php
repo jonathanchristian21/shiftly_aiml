@@ -26,55 +26,55 @@
 
 <!-- Filter Card -->
 <div class="card p-6 mb-6">
-    <form method="GET" class="grid grid-cols-1 md:grid-cols-6 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
         <div>
             <label class="text-tiny mb-2">Search</label>
-            <input type="text" name="search" placeholder="Name or code..." value="{{ request('search') }}" class="w-full">
+            <input type="text" id="searchFilter" placeholder="Name or code..." class="w-full" oninput="applyFilters()">
         </div>
         <div>
             <label class="text-tiny mb-2">Department</label>
-            <select name="department" class="w-full">
+            <select id="departmentFilter" class="w-full" onchange="applyFilters()">
                 <option value="">All Departments</option>
                 @foreach($departments as $dept)
-                    <option value="{{ $dept->id }}" {{ request('department') == $dept->id ? 'selected' : '' }}>{{ $dept->name }}</option>
+                    <option value="{{ $dept->id }}">{{ $dept->name }}</option>
                 @endforeach
             </select>
         </div>
         <div>
             <label class="text-tiny mb-2">Education</label>
-            <select name="education" class="w-full">
+            <select id="educationFilter" class="w-full" onchange="applyFilters()">
                 <option value="">All Education</option>
-                <option value="UG" {{ request('education') === 'UG' ? 'selected' : '' }}>UG</option>
-                <option value="PG" {{ request('education') === 'PG' ? 'selected' : '' }}>PG</option>
+                <option value="UG">UG</option>
+                <option value="PG">PG</option>
             </select>
         </div>
         <div>
             <label class="text-tiny mb-2">Job Level</label>
-            <select name="job_level" class="w-full">
+            <select id="jobLevelFilter" class="w-full" onchange="applyFilters()">
                 <option value="">All Levels</option>
                 @for($i = 1; $i <= 5; $i++)
-                    <option value="{{ $i }}" {{ request('job_level') == $i ? 'selected' : '' }}>Level {{ $i }}</option>
+                    <option value="{{ $i }}">Level {{ $i }}</option>
                 @endfor
             </select>
         </div>
         <div>
             <label class="text-tiny mb-2">Cluster</label>
-            <select name="cluster" class="w-full">
+            <select id="clusterFilter" class="w-full" onchange="applyFilters()">
                 <option value="">All Clusters</option>
                 @for($i = 1; $i <= 4; $i++)
-                    <option value="{{ $i }}" {{ request('cluster') == $i ? 'selected' : '' }}>Cluster {{ $i }}</option>
+                    <option value="{{ $i }}">Cluster {{ $i }}</option>
                 @endfor
             </select>
         </div>
         <div class="flex items-end">
-            <button type="submit" class="btn btn-primary w-full">
+            <button type="button" onclick="clearFilters()" class="btn btn-secondary w-full">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span>Filter</span>
+                <span>Clear</span>
             </button>
         </div>
-    </form>
+    </div>
 </div>
 
 <!-- Table Card -->
@@ -96,7 +96,13 @@
             </thead>
             <tbody>
                 @forelse($employees as $employee)
-                <tr>
+                <tr class="employee-row"
+                    data-code="{{ strtolower($employee->employee_code) }}"
+                    data-name="{{ strtolower($employee->name) }}"
+                    data-dept="{{ $employee->department_id }}"
+                    data-education="{{ $employee->education }}"
+                    data-level="{{ $employee->job_level }}"
+                    data-cluster="{{ $employee->cluster_label ?? '' }}">
                     <td class="mono font-semibold text-ink">{{ $employee->employee_code }}</td>
                     <td class="font-medium text-ink">{{ $employee->name }}</td>
                     <td class="mono">{{ $employee->age }}</td>
@@ -120,10 +126,10 @@
                             <a href="{{ route('manager.employees.edit', $employee) }}" class="px-3 py-1.5 border border-gray-200 rounded-md text-sky hover:border-sky hover:bg-sky/5 font-semibold text-caption transition-colors">
                                 Edit
                             </a>
-                            <form action="{{ route('manager.employees.destroy', $employee) }}" method="POST" class="inline" onsubmit="return confirm('Deactivate this employee?')">
+                            <form action="{{ route('manager.employees.destroy', $employee) }}" method="POST" class="inline" onsubmit="return confirm('Delete this employee?')">
                                 @csrf @method('DELETE')
                                 <button type="submit" class="px-3 py-1.5 border border-gray-200 rounded-md text-red-500 hover:border-red-500 hover:bg-red-50 font-semibold text-caption transition-colors">
-                                    Deactivate
+                                    Delete
                                 </button>
                             </form>
                         </div>
@@ -135,12 +141,47 @@
             </tbody>
         </table>
     </div>
-    
-    <!-- Pagination Footer -->
-    @if($employees->hasPages())
-    <div class="px-6 py-4 border-t border-gray-100 bg-gray-50">
-        {{ $employees->links() }}
-    </div>
-    @endif
 </div>
+
+<script>
+function applyFilters() {
+    const search = document.getElementById('searchFilter').value.toLowerCase();
+    const dept = document.getElementById('departmentFilter').value;
+    const education = document.getElementById('educationFilter').value;
+    const level = document.getElementById('jobLevelFilter').value;
+    const cluster = document.getElementById('clusterFilter').value;
+    
+    let visibleCount = 0;
+    document.querySelectorAll('.employee-row').forEach(row => {
+        const matchSearch = !search || 
+            row.dataset.code.includes(search) || 
+            row.dataset.name.includes(search);
+        const matchDept = !dept || row.dataset.dept === dept;
+        const matchEducation = !education || row.dataset.education === education;
+        const matchLevel = !level || row.dataset.level === level;
+        const matchCluster = !cluster || row.dataset.cluster === cluster;
+        
+        const isVisible = matchSearch && matchDept && matchEducation && matchLevel && matchCluster;
+        row.style.display = isVisible ? '' : 'none';
+        if (isVisible) visibleCount++;
+    });
+}
+
+function clearFilters() {
+    document.getElementById('searchFilter').value = '';
+    document.getElementById('departmentFilter').value = '';
+    document.getElementById('educationFilter').value = '';
+    document.getElementById('jobLevelFilter').value = '';
+    document.getElementById('clusterFilter').value = '';
+    applyFilters();
+}
+
+// Set filters from URL params on load
+document.addEventListener('DOMContentLoaded', function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('department')) document.getElementById('departmentFilter').value = params.get('department');
+    if (params.get('cluster')) document.getElementById('clusterFilter').value = params.get('cluster');
+    applyFilters();
+});
+</script>
 @endsection

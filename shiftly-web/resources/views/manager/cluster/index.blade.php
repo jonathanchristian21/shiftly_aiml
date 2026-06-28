@@ -81,14 +81,7 @@
                 </div>
             </div>
             
-            <div class="border-l-4 border-sky pl-4">
-                <div class="text-body font-semibold mb-2">🔗 Connection to Genetic Algorithm</div>
-                <p class="text-caption leading-relaxed">
-                    When GA creates <strong>initial population</strong>, each shift per department is guaranteed to be filled with <strong>at least 1 employee from Senior Cluster (Profile A)</strong>. 
-                    This makes the initial population already meet the hard constraint "minimum 1 PG per shift" from the first iteration, 
-                    so <strong>GA converges faster</strong> than random initialization.
-                </p>
-            </div>
+
         </div>
     </div>
 </div>
@@ -245,6 +238,13 @@
                     @endphp
                 </div>
             </div>
+            
+            <a href="{{ route('manager.employees.index', ['cluster' => $label]) }}" class="btn btn-secondary btn-sm w-full mt-4">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                View Employees
+            </a>
         </div>
         @endforeach
     </div>

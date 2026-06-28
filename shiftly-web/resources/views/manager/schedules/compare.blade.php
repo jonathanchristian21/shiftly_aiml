@@ -43,7 +43,7 @@
                         /*
                          * Cari candidate_id dengan final_score tertinggi SEBELUM loop.
                          * Tidak bisa pakai $index === 0 lagi karena urutan kandidat
-                         * tidak lagi diurutkan by final_score dari Python —
+                         * tidak lagi diurutkan by final_score dari Python -
                          * urutan tetap C1, C2, C3 seperti dari GA.
                          */
                         $bestCandidateId = collect($candidates)
@@ -99,7 +99,7 @@
                             </td>
                             <td>
                                 <div class="flex items-center gap-2">
-                                    <a href="{{ route('manager.schedules.candidate.show', ['candidateId' => $candidate['candidate_id']]) }}"
+                                    <a href="{{ route('manager.schedules.candidate.show', ['schedule' => $schedule->id, 'candidateCode' => $candidate['candidate_id']]) }}"
                                         class="btn btn-secondary btn-sm">
                                         <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -109,7 +109,7 @@
                                         </svg>
                                         <span>VIEW</span>
                                     </a>
-                                    <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline"
+                                    <form method="POST" action="{{ route('manager.schedules.publish', $schedule) }}" class="inline"
                                         onsubmit="return confirm('Publish this schedule?')">
                                         @csrf
                                         <input type="hidden" name="candidate_id" value="{{ $candidate['candidate_id'] }}">
@@ -139,32 +139,31 @@
                 <span class="badge badge-success text-xs shrink-0 mt-0.5">BEST</span>
                 <div>
                     <strong>Best Candidate</strong> dipilih berdasarkan
-                    <span class="font-semibold text-gray-800">Final Score</span> tertinggi,
+                    <span class="font-semibold text-gray-800">Final Score (0-100)</span> tertinggi,
                     yang merupakan kombinasi dari dua dimensi:
                     <ul class="mt-1 ml-4 space-y-0.5 list-disc">
-                        <li><strong>GA Fitness (50%)</strong> — kualitas operasional: seberapa baik jadwal memenuhi
-                            constraint shift, senior coverage, dan cluster balance</li>
-                        <li><strong>RF Profit Score (50%)</strong> — kualitas finansial: prediksi profitabilitas berdasarkan
+                        <li><strong>GA Fitness Normalized (50%)</strong> - kualitas operasional: GA Fitness dinormalisasi ke 0-100 berdasarkan min-max dalam batch kandidat ini, mengukur seberapa baik jadwal memenuhi constraint</li>
+                        <li><strong>RF Profit Score (50%)</strong> - kualitas finansial: prediksi profitabilitas 0-100 berdasarkan
                             komposisi SDM, biaya shift, dan risiko operasional</li>
                     </ul>
                     <div class="mt-1 font-mono text-xs bg-gray-100 rounded px-2 py-1 inline-block">
-                        Final Score = (GA Fitness norm &times; 50%) + (RF Profit Score &times; 50%)
+                        Final Score = (GA Norm &times; 50%) + (RF Score &times; 50%)
                     </div>
                     <p class="mt-1 text-xs text-gray-500">
-                        Label BEST tidak selalu jatuh di C1 — kandidat mana pun bisa menjadi BEST
+                        Label BEST tidak selalu jatuh di C1 - kandidat mana pun bisa menjadi BEST
                         tergantung hasil evaluasi RF terhadap jadwal yang dihasilkan GA.
                     </p>
                 </div>
             </div>
 
-            <div><strong>GA Fitness:</strong> Skor constraint satisfaction dari Genetic Algorithm — lebih tinggi berarti
+            <div><strong>GA Fitness:</strong> Skor constraint satisfaction dari Genetic Algorithm - lebih tinggi berarti
                 lebih sedikit pelanggaran jadwal (hard &amp; soft constraint)</div>
 
             <div><strong>RF Score (0–100):</strong> Prediksi profitabilitas operasional absolut dari Random Forest,
                 berdasarkan 12 fitur jadwal: coverage rate, dept tier weight, certified ratio, senior ratio,
                 night ratio, malam→pagi ratio, cost ratio, cluster balance, hard violation count,
                 soft violation ratio, dayoff violation ratio, dan avg job level.
-                Nilai ini <strong>tidak relatif antar kandidat</strong> — dua jadwal yang sama-sama baik
+                Nilai ini <strong>tidak relatif antar kandidat</strong> - dua jadwal yang sama-sama baik
                 bisa mendapat skor yang sama. Panduan: ≥70 = sangat baik, 40–70 = baik, &lt;40 = perlu perhatian.
             </div>
 

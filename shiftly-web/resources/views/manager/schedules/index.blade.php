@@ -33,14 +33,46 @@
                         <span class="text-gray-400">({{ $schedule->days }}d)</span>
                     </td>
                     <td>
-                        <span class="badge badge-{{ $schedule->status === 'published' ? 'success' : ($schedule->status === 'archived' ? 'secondary' : 'primary') }}">
+                        <span class="badge badge-{{ $schedule->status === 'published' ? 'success' : ($schedule->status === 'archived' ? 'secondary' : 'warning') }}">
                             {{ strtoupper($schedule->status) }}
                         </span>
                     </td>
-                    <td class="font-mono">{{ $schedule->selectedCandidate?->active_employees ?? '-' }}</td>
-                    <td class="font-mono">${{ $schedule->selectedCandidate ? number_format($schedule->selectedCandidate->total_salary / 1000000, 2) : '0.00' }}M</td>
-                    <td class="font-mono">{{ $schedule->selectedCandidate ? number_format($schedule->selectedCandidate->ga_fitness, 1) : '-' }}</td>
-                    <td class="font-mono text-green-600">{{ $schedule->selectedCandidate && $schedule->selectedCandidate->rf_profit_score ? number_format($schedule->selectedCandidate->rf_profit_score, 1) . '%' : '-' }}</td>
+                    <td class="font-mono">
+                        @if($schedule->selectedCandidate)
+                            {{ $schedule->selectedCandidate->active_employees }}
+                        @elseif($schedule->status === 'draft' && $schedule->candidates->isNotEmpty())
+                            {{ $schedule->candidates->first()->active_employees }}
+                        @else
+                            -
+                        @endif
+                    </td>
+                    <td class="font-mono">
+                        @if($schedule->selectedCandidate)
+                            ${{ number_format($schedule->selectedCandidate->total_salary / 1000, 1) }}K
+                        @elseif($schedule->status === 'draft' && $schedule->candidates->isNotEmpty())
+                            ${{ number_format($schedule->candidates->first()->total_salary / 1000, 1) }}K
+                        @else
+                            -
+                        @endif
+                    </td>
+                    <td class="font-mono">
+                        @if($schedule->selectedCandidate)
+                            {{ number_format($schedule->selectedCandidate->ga_fitness, 1) }}
+                        @elseif($schedule->status === 'draft' && $schedule->candidates->isNotEmpty())
+                            {{ number_format($schedule->candidates->first()->ga_fitness, 1) }}
+                        @else
+                            -
+                        @endif
+                    </td>
+                    <td class="font-mono text-green-600">
+                        @if($schedule->selectedCandidate && $schedule->selectedCandidate->rf_profit_score)
+                            {{ number_format($schedule->selectedCandidate->rf_profit_score, 1) }}%
+                        @elseif($schedule->status === 'draft' && $schedule->candidates->isNotEmpty() && $schedule->candidates->first()->rf_profit_score)
+                            {{ number_format($schedule->candidates->first()->rf_profit_score, 1) }}%
+                        @else
+                            -
+                        @endif
+                    </td>
                     <td class="text-caption text-gray-500">{{ $schedule->created_at->format('M d, H:i') }}</td>
                     <td>
                         <div class="flex items-center space-x-2">

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ScheduleEntry;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class EmployeeScheduleController extends Controller
 {
@@ -21,6 +22,16 @@ class EmployeeScheduleController extends Controller
             ->whereHas('scheduleCandidate', function($q) {
                 $q->where('status', 'selected')
                     ->whereHas('scheduleRun', fn($qr) => $qr->where('status', 'published'));
+            })
+            ->whereHas('department', function($q) {
+                $q->where('is_active', true);
+            })
+            ->whereExists(function($q) {
+                $q->select(DB::raw(1))
+                  ->from('department_shift_requirements')
+                  ->whereColumn('department_shift_requirements.department_id', 'schedule_entries.department_id')
+                  ->whereColumn('department_shift_requirements.shift', 'schedule_entries.shift')
+                  ->where('department_shift_requirements.is_active', true);
             })
             ->orderBy('shift_date')
             ->paginate(30);

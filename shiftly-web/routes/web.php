@@ -46,7 +46,17 @@ Route::middleware(['auth', 'role:manager'])->prefix('manager')->name('manager.')
     Route::get('/employees-import', [EmployeeController::class, 'showImport'])->name('employees.import');
     Route::post('/employees-import', [EmployeeController::class, 'import'])->name('employees.import.process');
     
+    Route::post('/departments/{department}/activate', [DepartmentController::class, 'activate'])->name('departments.activate');
+    Route::post('/departments/{department}/deactivate', [DepartmentController::class, 'deactivate'])->name('departments.deactivate');
+    Route::post('/departments/bulk-activate', [DepartmentController::class, 'bulkActivate'])->name('departments.bulk-activate');
+    Route::post('/departments/bulk-deactivate', [DepartmentController::class, 'bulkDeactivate'])->name('departments.bulk-deactivate');
+    Route::delete('/departments/bulk', [DepartmentController::class, 'bulkDestroy'])->name('departments.bulk');
     Route::resource('departments', DepartmentController::class);
+    
+    Route::post('/shift-requirements/{shiftRequirement}/activate', [ShiftRequirementController::class, 'activate'])->name('shift-requirements.activate');
+    Route::post('/shift-requirements/{shiftRequirement}/deactivate', [ShiftRequirementController::class, 'deactivate'])->name('shift-requirements.deactivate');
+    Route::post('/shift-requirements-bulk-activate', [ShiftRequirementController::class, 'bulkActivate'])->name('shift-requirements.bulk-activate');
+    Route::post('/shift-requirements-bulk-deactivate', [ShiftRequirementController::class, 'bulkDeactivate'])->name('shift-requirements.bulk-deactivate');
     Route::resource('shift-requirements', ShiftRequirementController::class);
     Route::post('/shift-requirements-bulk', [ShiftRequirementController::class, 'bulkCreate'])->name('shift-requirements.bulk');
     
@@ -56,9 +66,9 @@ Route::middleware(['auth', 'role:manager'])->prefix('manager')->name('manager.')
     Route::get('/schedules', [ScheduleController::class, 'index'])->name('schedules.index');
     Route::get('/schedules/create', [ScheduleController::class, 'create'])->name('schedules.create');
     Route::post('/schedules/generate', [ScheduleController::class, 'generate'])->name('schedules.generate');
-    Route::get('/schedules/compare', [ScheduleController::class, 'compare'])->name('schedules.compare');
-    Route::get('/schedules/compare/{candidateId}', [ScheduleController::class, 'showCandidate'])->name('schedules.candidate.show');
-    Route::post('/schedules/publish', [ScheduleController::class, 'publish'])->name('schedules.publish');
+    Route::get('/schedules/{schedule}/compare', [ScheduleController::class, 'compare'])->name('schedules.compare');
+    Route::get('/schedules/{schedule}/compare/{candidateCode}', [ScheduleController::class, 'showCandidate'])->name('schedules.candidate.show');
+    Route::post('/schedules/{schedule}/publish', [ScheduleController::class, 'publish'])->name('schedules.publish');
     Route::get('/schedules/{schedule}', [ScheduleController::class, 'show'])->name('schedules.show');
     Route::delete('/schedules/{schedule}', [ScheduleController::class, 'destroy'])->name('schedules.destroy');
 });
