@@ -66,8 +66,17 @@ class ScheduleGenerationService
         }
 
         $gaParameters = $input['ga_parameters'] ?? [];
+
+        // PAYLOAD untuk FastAPI.
+        // Penting: field `employees` HARUS dikirim agar RF bisa hitung rf_profit_score
+        // dari profil pegawai asli (bukan fallback default).
+        $employeePayloads = $employees
+            ->map(fn (Employee $employee) => $this->employeePayload($employee))
+            ->values()
+            ->all();
+
         $payload = [
-            'employees' => $employees->map(fn (Employee $employee) => $this->employeePayload($employee))->values()->all(),
+            'employees' => $employeePayloads,
             'start_date' => $startDate,
             'end_date' => $endDate,
             'candidates' => (int) ($input['candidates'] ?? 3),
@@ -76,8 +85,8 @@ class ScheduleGenerationService
             'seed' => $input['seed'] ?? 42,
         ];
 
-        $generated = $this->ai->generateSchedules($payload);
-        $evaluated = $this->ai->evaluateCandidates($generated['candidates'] ?? []);
+        // Gunakan pipeline GA+RF sekaligus di endpoint FastAPI.
+        $evaluated = $this->ai->generateAndEvaluate($payload);
 
         return DB::transaction(function () use (
             $managerId,

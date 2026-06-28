@@ -5,7 +5,7 @@
 @section('content')
 <div class="mb-8">
     <h1 class="text-display">Compare Candidates</h1>
-    <p class="text-body text-gray-600 mt-2">GA generated {{ count($candidates) }} candidates • RF evaluated profitability</p>
+    <p class="text-body text-gray-600 mt-2">GA generated {{ count($candidates) }} candidates &bull; RF evaluated profitability</p>
 </div>
 
 <div class="card p-6 mb-6">
@@ -25,6 +25,7 @@
                     <th>CANDIDATE</th>
                     <th>GA FITNESS</th>
                     <th>RF SCORE</th>
+                    <th>FINAL SCORE</th>
                     <th>TOTAL SALARY</th>
                     <th>ACTIVE EMPS</th>
                     <th>ASSIGNMENTS</th>
@@ -33,12 +34,46 @@
                 </tr>
             </thead>
             <tbody>
-                @foreach($candidates as $candidate)
-                <tr>
-                    <td><span class="badge badge-secondary font-mono">{{ substr($candidate['candidate_id'], -3) }}</span></td>
-                    <td class="font-mono font-semibold">{{ number_format($candidate['summary']['ga_fitness'], 1) }}</td>
-                    <td class="font-mono font-semibold text-green-600">{{ number_format($candidate['rf_profit_score'], 1) }}%</td>
-                    <td class="font-mono">${{ number_format($candidate['summary']['total_salary'] / 1000000, 2) }}M</td>
+                @foreach($candidates as $index => $candidate)
+                @php
+                    /*
+                        BEST ditentukan dari final_score tertinggi.
+                        final_score = (GA Fitness normalized × 50%) + (RF Profit Score × 50%)
+                        Kandidat sudah diurutkan DESC by final_score dari Python,
+                        jadi index 0 selalu yang terbaik.
+                    */
+                    $isBest      = $index === 0;
+                    $finalScore  = $candidate['final_score'] ?? $candidate['predicted_salary'] ?? 0;
+                    $rfScore     = $candidate['rf_profit_score'] ?? 0;
+                    $totalSalary = $candidate['summary']['total_salary'] ?? 0;
+                @endphp
+                <tr class="{{ $isBest ? 'bg-green-50' : '' }}">
+                    <td>
+                        <span class="badge badge-secondary font-mono">{{ substr($candidate['candidate_id'], -3) }}</span>
+                        @if($isBest)
+                            <span class="badge badge-success ml-1 text-xs">BEST</span>
+                        @endif
+                    </td>
+                    <td class="font-mono font-semibold">
+                        {{ number_format($candidate['summary']['ga_fitness'], 1) }}
+                    </td>
+                    <td class="font-mono font-semibold {{ $rfScore >= 70 ? 'text-green-600' : ($rfScore >= 40 ? 'text-yellow-600' : 'text-orange-500') }}">
+                        {{ number_format($rfScore, 1) }}%
+                    </td>
+                    <td class="font-mono font-semibold {{ $isBest ? 'text-green-700' : 'text-gray-700' }}">
+                        {{ number_format($finalScore, 1) }}
+                    </td>
+                    {{--
+                        Total Salary dalam USD (sesuai satuan data CSV salary).
+                        Dihitung oleh salary_calculator.py berdasarkan assignment aktual:
+                        - shift malam × 1.20
+                        - sertifikasi × 1.15
+                        - malam→pagi + 10% bonus
+                        Dibagi 1000 untuk tampilkan dalam ribuan USD (K).
+                    --}}
+                    <td class="font-mono">
+                        ${{ number_format($totalSalary / 1000, 1) }}K
+                    </td>
                     <td class="font-mono">{{ $candidate['summary']['active_employees'] }}</td>
                     <td class="font-mono">{{ $candidate['summary']['total_assignments'] }}</td>
                     <td>
@@ -75,12 +110,45 @@
     </div>
 </div>
 
+{{-- Deskripsi BEST dan cara pembacaan tabel --}}
 <div class="card p-6">
-    <h3 class="text-headline mb-3">How to Choose?</h3>
-    <div class="space-y-2 text-caption text-gray-600">
-        <div><strong>GA Fitness:</strong> Constraint satisfaction score (higher = fewer violations)</div>
-        <div><strong>RF Profit Score:</strong> Financial profitability prediction (higher = more cost-efficient)</div>
-        <div><strong>Recommendation:</strong> Choose candidate with <span class="text-green-600 font-semibold">highest RF Score</span> and <span class="text-red-600 font-semibold">H:0</span> (no hard violations)</div>
+    <h3 class="text-headline mb-4">How to Read This Table</h3>
+    <div class="space-y-3 text-caption text-gray-600">
+
+        <div class="flex gap-2">
+            <span class="badge badge-success text-xs shrink-0 mt-0.5">BEST</span>
+            <div>
+                <strong>Best Candidate</strong> dipilih berdasarkan
+                <span class="font-semibold text-gray-800">Final Score</span> tertinggi,
+                yang merupakan kombinasi dari dua dimensi:
+                <ul class="mt-1 ml-4 space-y-0.5 list-disc">
+                    <li><strong>GA Fitness (50%)</strong> — kualitas operasional: seberapa baik jadwal memenuhi constraint shift, senior coverage, dan cluster balance</li>
+                    <li><strong>RF Profit Score (50%)</strong> — kualitas finansial: prediksi profitabilitas berdasarkan komposisi SDM, biaya shift, dan risiko operasional</li>
+                </ul>
+                <div class="mt-1 font-mono text-xs bg-gray-100 rounded px-2 py-1 inline-block">
+                    Final Score = (GA Fitness norm &times; 50%) + (RF Profit Score &times; 50%)
+                </div>
+            </div>
+        </div>
+
+        <div><strong>GA Fitness:</strong> Skor constraint satisfaction dari Genetic Algorithm — lebih tinggi berarti lebih sedikit pelanggaran jadwal (hard &amp; soft constraint)</div>
+
+        <div><strong>RF Profit Score (10–100%):</strong> Prediksi profitabilitas dari Random Forest berdasarkan 12 fitur jadwal:
+            coverage rate, dept tier weight, certified ratio, senior ratio, night ratio,
+            malam→pagi bonus, cost ratio, cluster balance, violations, dan job level.
+            Skala 10–100 (tidak pernah 0) karena dinormalisasi relatif dalam batch kandidat ini.
+        </div>
+
+        <div><strong>Total Salary:</strong> Estimasi total biaya gaji jadwal ini dalam USD, dihitung per assignment aktual oleh salary_calculator dengan multiplier:
+            shift malam ×1.2, sertifikasi ×1.15, bonus malam→pagi +10%.
+        </div>
+
+        <div class="pt-1 border-t border-gray-200">
+            <strong>Rekomendasi:</strong>
+            Pilih kandidat <span class="text-green-600 font-semibold">BEST</span> (Final Score tertinggi)
+            dengan <span class="text-red-600 font-semibold">H:0</span> (tidak ada hard violation).
+            Jika BEST punya H &gt; 0, pertimbangkan kandidat lain dengan H:0 meskipun Final Score-nya lebih rendah.
+        </div>
     </div>
 </div>
 

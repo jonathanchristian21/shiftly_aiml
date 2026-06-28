@@ -1,489 +1,477 @@
 """
 train_rf_model.py
 =================
-Script training Random Forest untuk memprediksi estimasi salary (biaya) jadwal rumah sakit.
+Training pipeline Random Forest untuk memprediksi PROFIT SCORE jadwal rumah sakit.
 
-ALUR KERJA (pipeline lengkap):
-================================
-  1. Load data Employee_Satisfaction_Index.csv
-  2. Feature Engineering
-       - Tambah kolom is_nightshift, has_certification, is_senior
-       - Hitung estimated_daily_salary dengan aturan bisnis (nightshift 1.2x, sertifikasi 1.15x)
-       - Tambah kolom night_to_morning_flag (simulasi pola shift berurutan)
-  3. Persiapan fitur (X) dan target (y = estimated_daily_salary)
-  4. Encode fitur kategorikal (education, Dept, dll.)
-  5. Split data menggunakan K-Fold Cross Validation (k=5)
-  6. Training Random Forest baseline dan evaluasi (MAE, RMSE, R²) per fold
-  7. Hyperparameter Tuning dengan RandomizedSearchCV
-  8. Evaluasi model tuned (MAE, RMSE, R²)
-  9. Simpan model + scaler ke file .joblib → dipakai rf_service.py saat runtime
+RF tidak lagi memprediksi salary — RF langsung memprediksi seberapa profitable
+suatu kandidat jadwal berdasarkan kombinasi fitur operasional dan finansial.
 
-Cara menjalankan:
------------------
-  cd shiftly-ai
-  python train_rf_model.py
+KENAPA PENDEKATAN INI LEBIH BAIK:
+-----------------------------------
+Versi sebelumnya: RF prediksi salary → dikonversi ke skor
+  Masalah: salary bisa dihitung deterministik dari salary_calculator,
+  RF tidak menambah informasi baru.
 
-Output:
--------
-  models/rf_salary_model.joblib   ← model Random Forest terlatih
-  models/rf_feature_names.joblib  ← daftar nama kolom fitur (penting untuk konsistensi prediksi)
+Versi baru: RF langsung prediksi profit_score dari fitur jadwal
+  Keuntungan: RF belajar pola INTERAKSI antar fitur yang tidak bisa
+  di-capture formula sederhana. Misalnya: jadwal dengan cluster_balance
+  tinggi + sedikit shift malam + pegawai bersertifikasi tinggi
+  menghasilkan kombinasi cost-quality yang lebih profitable daripada
+  sekadar menjumlahkan komponen-komponennya.
 
-Catatan untuk mahasiswa:
-------------------------
-  - K-Fold: data dibagi jadi k bagian. Setiap fold, 1 bagian jadi testing, sisanya training.
-    Tujuannya: menghindari model "hafal" data training (overfitting).
-  - MAE (Mean Absolute Error): rata-rata selisih prediksi vs aktual. Makin kecil makin baik.
-  - RMSE (Root Mean Squared Error): seperti MAE tapi kesalahan besar dihukum lebih berat.
-  - R² (R-squared): seberapa banyak variasi data bisa dijelaskan model. Makin dekat 1 makin baik.
-  - RandomizedSearchCV: mencoba kombinasi hyperparameter secara acak untuk cari yang terbaik.
-    Lebih efisien dari GridSearchCV (tidak coba semua kombinasi).
+ALUR PIPELINE:
+--------------
+  1. Load Employee_Satisfaction_Index.csv
+  2. Jalankan GA berkali-kali dengan variasi employee dan requirements
+  3. Untuk setiap kandidat jadwal, hitung profit_score dengan formula bisnis
+  4. Kumpulkan: fitur jadwal (X) + profit_score (y) → dataset training
+  5. Train/test split 80/20
+  6. K-Fold CV (k=5) di train set
+  7. RandomizedSearchCV untuk hyperparameter tuning
+  8. Evaluasi MAE, RMSE, R² di training dan test set
+  9. Simpan model ke models/rf_profit_model.joblib
+
+PROFIT SCORE FORMULA (0-100):
+------------------------------
+  profit_score = revenue_proxy - cost_proxy - risk_proxy
+
+  revenue_proxy  = coverage_rate × dept_weight_avg × 40
+                 (seberapa baik shift terpenuhi × pentingnya dept)
+
+  cost_proxy     = (total_salary / benchmark_salary) × 30
+                 (seberapa mahal dibanding benchmark)
+
+  risk_proxy     = hard_violations × 8
+                 + soft_violation_ratio × 10
+                 + dayoff_violation_ratio × 7
+                 + night_to_morning_ratio × 5
+
+  Semua komponen dinormalisasi ke rasio (bukan nilai absolut) agar
+  tidak terpengaruh ukuran jadwal (7 hari vs 14 hari, sedikit vs banyak pegawai).
 """
 
 from __future__ import annotations
 
-import os
-import warnings
+import os, sys, warnings
+warnings.filterwarnings("ignore")
+sys.path.insert(0, os.path.dirname(__file__))
+
 import numpy as np
 import pandas as pd
 import joblib
 
+from datetime import date
 from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import KFold, RandomizedSearchCV, cross_val_score
-from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import KFold, RandomizedSearchCV, train_test_split
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
-warnings.filterwarnings("ignore")  # Suppress warning tidak penting saat training
+from app.schemas import (
+    Employee, DepartmentShiftRequirement, GenerateScheduleRequest, GAParameters
+)
+from app.services.ga_engine import generate_candidates
+from app.services.salary_calculator import compute_candidate_salary_features
+
+# ── Path ──────────────────────────────────────────────────────────────────────
+CSV_PATH    = os.path.join(os.path.dirname(__file__), "Employee_Satisfaction_Index.csv")
+MODEL_DIR   = os.path.join(os.path.dirname(__file__), "models")
+MODEL_PATH  = os.path.join(MODEL_DIR, "rf_profit_model.joblib")
+FEAT_PATH   = os.path.join(MODEL_DIR, "rf_profit_feature_names.joblib")
+
+# ── Konstanta bisnis ──────────────────────────────────────────────────────────
+# Tier department: Emergency/Surgeon paling kritis, Nurse Assistant paling rendah
+DEPT_TIER: dict[str, int] = {
+    "Emergency Physician": 1, "Surgeon": 1, "Orthopedic Surgeon": 1,
+    "Cardiologist": 1, "Neurologist": 1, "Anesthesiologist": 1,
+    "Oncologist": 2, "Radiologist": 2, "Pediatrician": 2, "General Practitioner": 2,
+    "Registered Nurse": 3, "Nurse Practitioner": 3, "Nurse Assistant": 3,
+}
+TIER_WEIGHT = {1: 1.5, 2: 1.0, 3: 0.6}
+
+# Benchmark salary harian (USD) untuk cost_proxy normalization
+# Dataset salary range 24076-86750 (anggap USD), daily = salary/22
+# Mean daily = ~2292 USD, × avg_active_emps (~15-30) × days (7-14)
+BENCHMARK_DAILY_PER_EMP_USD = 2292.0
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# KONFIGURASI PATH
-# ─────────────────────────────────────────────────────────────────────────────
+# ── STEP 1: Load & prep employees dari CSV ────────────────────────────────────
 
-# Path file CSV data pegawai
-CSV_PATH = os.path.join(os.path.dirname(__file__), "Employee_Satisfaction_Index.csv")
-
-# Folder output model yang sudah ditraining
-MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
-MODEL_PATH = os.path.join(MODEL_DIR, "rf_salary_model.joblib")
-FEATURE_NAMES_PATH = os.path.join(MODEL_DIR, "rf_feature_names.joblib")
-
-# Konstanta bisnis (sama dengan salary_calculator.py agar konsisten)
-WORKING_DAYS_PER_MONTH  = 22
-NIGHT_SHIFT_MULTIPLIER  = 1.20
-CERTIFICATION_MULTIPLIER = 1.15
-NIGHT_TO_MORNING_BONUS  = 0.10
-
-# K-Fold: jumlah fold untuk cross validation
-N_FOLDS = 5
-
-# RandomizedSearchCV: jumlah kombinasi hyperparameter yang dicoba
-N_ITER_SEARCH = 30
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 1: LOAD DATA
-# ─────────────────────────────────────────────────────────────────────────────
-
-def load_data(csv_path: str) -> pd.DataFrame:
+def load_employees(csv_path: str) -> list[Employee]:
     """
-    Load dataset Employee_Satisfaction_Index.csv ke DataFrame.
-
-    Kolom yang ada di CSV:
-      emp_id, age, Dept, location, education, recruitment_type,
-      job_level, rating, onsite, awards, certifications, salary, satisfied
-
-    Return: DataFrame mentah (belum diproses)
+    Load CSV → list[Employee] untuk dipakai GA.
+    Kolom yang tidak relevan di-drop, Dept di-encode ke department_id via tier.
     """
-    print(f"[1/8] Memuat data dari: {csv_path}")
     df = pd.read_csv(csv_path)
-    print(f"      → {len(df)} baris, {len(df.columns)} kolom")
-    return df
+    employees = []
+    for i, row in df.iterrows():
+        dept = str(row.get("Dept", "Registered Nurse")).strip()
+        tier = DEPT_TIER.get(dept, 3)
+        employees.append(Employee(
+            id=int(i) + 1,
+            department_id=tier,
+            department=dept,
+            education=str(row.get("education", "UG")).strip().upper(),
+            job_level=int(row.get("job_level", 2)),
+            age=int(row.get("age", 30)),
+            salary=float(row.get("salary", 40000)),
+            rating=float(row.get("rating", 3.0)),
+            satisfied=int(row.get("satisfied", 3)),
+            certifications=int(row.get("certifications", 0)),
+            awards=int(row.get("awards", 0)),
+            onsite=int(row.get("onsite", 0)),
+            cluster=None,
+            is_senior=str(row.get("education", "UG")).strip().upper() == "PG",
+        ))
+    return employees
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 2: FEATURE ENGINEERING
-# ─────────────────────────────────────────────────────────────────────────────
+# ── STEP 2: Hitung profit_score per kandidat ──────────────────────────────────
 
-def feature_engineering(df: pd.DataFrame) -> pd.DataFrame:
+def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -> float:
     """
-    Tambahkan kolom-kolom baru yang penting untuk prediksi salary jadwal.
+    Hitung profit_score (0-100) berdasarkan formula bisnis yang defensible.
 
-    Kolom baru yang ditambahkan:
-    ----------------------------
-    is_nightshift         : bool – apakah baris ini representasi shift malam?
-                            Kita simulasikan: pegawai senior (PG) + job_level tinggi
-                            lebih sering dijadwalkan malam → probabilistik berdasarkan
-                            quartil job_level.
-    has_certification     : bool – certifications >= 1
-    is_senior             : bool – education == 'PG'
-    night_to_morning_flag : bool – simulasi pola malam→pagi (acak berbasis seed
-                            agar reproducible). Di produksi, nilainya berasal dari
-                            data assignment GA yang sesungguhnya.
-    estimated_daily_salary: float – TARGET yang diprediksi model.
-                            Dihitung dari salary/22 × multiplier berdasarkan aturan bisnis.
+    KOMPONEN:
+    ---------
+    revenue_proxy (max 40 poin):
+      coverage_rate = shift yang terpenuhi / total shift yang dibutuhkan
+      dept_weight   = rata-rata bobot tier dept dari pegawai aktif
+      → Jadwal yang menutupi semua shift kritis (Tier 1) lebih profitable
 
-    Kenapa kita perlu feature engineering?
-    ---------------------------------------
-    Data CSV aslinya hanya punya 'salary' bulanan dan atribut pegawai.
-    Model perlu belajar bahwa shift malam dan sertifikasi membuat biaya lebih tinggi.
-    Kita MENSIMULASIKAN kolom-kolom ini berdasarkan data yang ada.
-    Di produksi, data ini datang langsung dari output GA yang sudah berisi
-    informasi shift nyata (lihat candidate_features() di rf_service.py).
+    cost_proxy (max 30 poin, penalti):
+      Dibandingkan benchmark salary harian × jumlah assignment aktif
+      → Jadwal yang lebih hemat dari benchmark dapat penalti lebih kecil
+
+    risk_proxy (penalti dari violations dan shift berbahaya):
+      hard_violation      × 8    (wajib 0, setiap pelanggaran sangat mahal)
+      soft_violation_ratio× 10   (normalized per assignment)
+      dayoff_viol_ratio   × 7    (pegawai butuh istirahat)
+      night_to_morning    × 5    (risiko kelelahan dan kesalahan medis)
     """
-    print("[2/8] Feature engineering...")
+    s = candidate.summary
 
-    df = df.copy()
+    # ── Revenue proxy ──────────────────────────────────────────────────────
+    # Hitung coverage: berapa slot shift yang terpenuhi
+    total_required  = sum(r["required_staff"] * 3 for r in requirements)  # 3 shift/hari
+    total_required  = max(total_required, 1)
+    # Gunakan total_assignments sebagai proxy coverage (sudah memenuhi requirement)
+    coverage_rate   = min(1.0, s.total_assignments / max(total_required, 1))
 
-    # ── Kolom boolean dasar ───────────────────────────────────────────────────
-    df["has_certification"] = (df["certifications"] >= 1).astype(int)
-    df["is_senior"]         = (df["education"].str.upper() == "PG").astype(int)
+    # Rata-rata dept_weight pegawai aktif
+    active_ids      = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
+    dept_weights    = []
+    for eid in active_ids:
+        emp = employees_by_id.get(eid)
+        if emp:
+            tier = DEPT_TIER.get(emp.department or "", 3)
+            dept_weights.append(TIER_WEIGHT[tier])
+        else:
+            dept_weights.append(1.0)
+    avg_dept_weight = float(np.mean(dept_weights)) if dept_weights else 1.0
 
-    # ── Simulasi is_nightshift ────────────────────────────────────────────────
-    # Asumsi: pegawai dengan job_level >= 4 (senior) lebih sering shift malam.
-    # Ini representasi distribusi nyata di rumah sakit.
-    rng = np.random.default_rng(seed=42)
-    job_level_quartile_high = df["job_level"].quantile(0.60)
-    prob_night = np.where(df["job_level"] >= job_level_quartile_high, 0.45, 0.20)
-    df["is_nightshift"] = (rng.random(len(df)) < prob_night).astype(int)
+    revenue_proxy   = coverage_rate * avg_dept_weight * 40.0
 
-    # ── Simulasi night_to_morning_flag ────────────────────────────────────────
-    # Hanya berlaku jika is_nightshift = 1, dan probabilitas transisi = 30%
-    df["night_to_morning_flag"] = 0
-    night_mask = df["is_nightshift"] == 1
-    df.loc[night_mask, "night_to_morning_flag"] = (
-        rng.random(night_mask.sum()) < 0.30
-    ).astype(int)
+    # ── Cost proxy ─────────────────────────────────────────────────────────
+    sal_feats       = compute_candidate_salary_features(candidate, employees_by_id)
+    actual_total    = sal_feats["estimated_total_salary"]
+    active_assign   = max(sal_feats.get("night_shift_count", 0) + 1, s.total_assignments, 1)
+    benchmark_total = BENCHMARK_DAILY_PER_EMP_USD * active_assign
+    cost_ratio      = actual_total / max(benchmark_total, 1)
+    # cost_ratio > 1 = lebih mahal dari benchmark → penalti lebih besar
+    cost_proxy      = min(30.0, cost_ratio * 15.0)
 
-    # ── Target: estimated_daily_salary ───────────────────────────────────────
-    # Gaji harian dasar
-    daily_base = df["salary"] / WORKING_DAYS_PER_MONTH
+    # ── Risk proxy ─────────────────────────────────────────────────────────
+    total_assign        = max(s.total_assignments, 1)
+    soft_ratio          = s.soft_violation_count / total_assign
+    dayoff_ratio        = s.weekly_day_off_violations / total_assign
+    night_count         = s.shift_counts.get("Malam", 0)
+    ntm_ratio           = sal_feats["night_to_morning_count"] / total_assign
 
-    # Terapkan multiplier sesuai aturan bisnis
-    multiplier = np.ones(len(df))
-    multiplier = np.where(df["is_nightshift"] == 1, multiplier * NIGHT_SHIFT_MULTIPLIER, multiplier)
-    multiplier = np.where(df["has_certification"] == 1, multiplier * CERTIFICATION_MULTIPLIER, multiplier)
-    multiplier = np.where(df["night_to_morning_flag"] == 1, multiplier * (1 + NIGHT_TO_MORNING_BONUS), multiplier)
-
-    df["estimated_daily_salary"] = (daily_base * multiplier).round(2)
-
-    print(f"      → Kolom baru: is_nightshift, has_certification, is_senior,")
-    print(f"        night_to_morning_flag, estimated_daily_salary")
-    print(f"      → Target (estimated_daily_salary): min={df['estimated_daily_salary'].min():.0f}, "
-          f"max={df['estimated_daily_salary'].max():.0f}, "
-          f"mean={df['estimated_daily_salary'].mean():.0f}")
-
-    return df
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 3 & 4: PERSIAPAN FITUR DAN ENCODING
-# ─────────────────────────────────────────────────────────────────────────────
-
-def prepare_features(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, list[str]]:
-    """
-    Pilih kolom fitur (X) dan target (y), lalu encode kolom kategorikal.
-
-    Fitur yang dipakai:
-      - age, job_level, rating, certifications, awards, onsite, satisfied
-      - is_nightshift, has_certification, is_senior, night_to_morning_flag
-      - education (encoded), Dept (encoded), location (encoded), recruitment_type (encoded)
-
-    Kolom yang di-encode: string → angka menggunakan LabelEncoder.
-    LabelEncoder mengubah kategori ke angka integer (misal: "PG"→1, "UG"→0).
-
-    Return:
-    -------
-    X            : DataFrame fitur
-    y            : Series target (estimated_daily_salary)
-    feature_names: list nama kolom fitur
-    """
-    print("[3/8] Menyiapkan fitur dan encoding kategorikal...")
-
-    # Kolom kategorikal yang perlu di-encode
-    categorical_cols = ["education", "Dept", "location", "recruitment_type"]
-
-    df_encoded = df.copy()
-    for col in categorical_cols:
-        le = LabelEncoder()
-        df_encoded[col + "_enc"] = le.fit_transform(df_encoded[col].astype(str))
-
-    # Daftar fitur akhir yang masuk ke model
-    feature_cols = [
-        # Atribut numerik pegawai
-        "age", "job_level", "rating", "certifications", "awards", "onsite", "satisfied",
-        # Fitur rekayasa (engineered features)
-        "is_nightshift", "has_certification", "is_senior", "night_to_morning_flag",
-        # Atribut kategorikal (sudah di-encode)
-        "education_enc", "Dept_enc", "location_enc", "recruitment_type_enc",
-    ]
-
-    X = df_encoded[feature_cols]
-    y = df_encoded["estimated_daily_salary"]
-
-    print(f"      → {len(feature_cols)} fitur: {feature_cols}")
-    return X, y, feature_cols
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 5 & 6: K-FOLD CROSS VALIDATION (MODEL BASELINE)
-# ─────────────────────────────────────────────────────────────────────────────
-
-def evaluate_with_kfold(X: pd.DataFrame, y: pd.Series, n_folds: int = 5) -> RandomForestRegressor:
-    """
-    Training model baseline Random Forest dengan K-Fold Cross Validation.
-
-    K-Fold bekerja seperti ini (contoh k=5):
-    -----------------------------------------
-    Data: [████ fold1 ████][████ fold2 ████][████ fold3 ████][████ fold4 ████][████ fold5 ████]
-
-    Iterasi 1: Training=[fold2,3,4,5], Testing=[fold1]
-    Iterasi 2: Training=[fold1,3,4,5], Testing=[fold2]
-    ... dst.
-
-    Lalu rata-ratakan MAE/RMSE/R² dari semua fold.
-    Ini lebih fair daripada split satu kali (train/test split).
-
-    Parameter:
-    ----------
-    n_folds : int
-        Jumlah fold. Default 5 → data dibagi 5 bagian (80% train, 20% test per fold).
-
-    Return:
-    -------
-    model : RandomForestRegressor yang ditraining di seluruh data (setelah evaluasi fold)
-    """
-    print(f"\n[4/8] K-Fold Cross Validation (k={n_folds}) — Model Baseline...")
-
-    kf = KFold(n_splits=n_folds, shuffle=True, random_state=42)
-
-    # Model baseline dengan hyperparameter default
-    baseline_model = RandomForestRegressor(
-        n_estimators=100,
-        random_state=42,
-        n_jobs=-1,   # pakai semua CPU core
+    risk_proxy = (
+        s.hard_violation_count * 8.0
+        + soft_ratio           * 10.0
+        + dayoff_ratio         * 7.0
+        + ntm_ratio            * 5.0
     )
 
-    mae_scores  = []
-    rmse_scores = []
-    r2_scores   = []
-
-    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(X), start=1):
-        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-
-        baseline_model_fold = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
-        baseline_model_fold.fit(X_train, y_train)
-        y_pred = baseline_model_fold.predict(X_test)
-
-        mae  = mean_absolute_error(y_test, y_pred)
-        rmse = mean_squared_error(y_test, y_pred) ** 0.5
-        r2   = r2_score(y_test, y_pred)
-
-        mae_scores.append(mae)
-        rmse_scores.append(rmse)
-        r2_scores.append(r2)
-
-        print(f"      Fold {fold_idx}: MAE={mae:.2f} | RMSE={rmse:.2f} | R²={r2:.4f}")
-
-    print(f"\n      ── Rata-rata K-Fold Baseline ──")
-    print(f"      MAE  : {np.mean(mae_scores):.2f}  (±{np.std(mae_scores):.2f})")
-    print(f"      RMSE : {np.mean(rmse_scores):.2f}  (±{np.std(rmse_scores):.2f})")
-    print(f"      R²   : {np.mean(r2_scores):.4f} (±{np.std(r2_scores):.4f})")
-
-    # Training ulang di seluruh data untuk dipakai di langkah berikutnya
-    baseline_model.fit(X, y)
-    return baseline_model
+    score = revenue_proxy - cost_proxy - risk_proxy
+    return float(np.clip(score, 0.0, 100.0))
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 7: HYPERPARAMETER TUNING — RandomizedSearchCV
-# ─────────────────────────────────────────────────────────────────────────────
+# ── STEP 3: Ekstrak fitur jadwal untuk input RF ───────────────────────────────
 
-def hyperparameter_tuning(X: pd.DataFrame, y: pd.Series, n_iter: int = 30) -> RandomForestRegressor:
+def extract_schedule_features(candidate, employees_by_id: dict) -> dict:
     """
-    Cari hyperparameter terbaik menggunakan RandomizedSearchCV.
+    Ekstrak 12 fitur dari kandidat jadwal.
+    Semua fitur dinormalisasi ke rasio agar skala-invariant.
 
-    Apa itu hyperparameter?
-    -----------------------
-    Hyperparameter adalah "pengaturan" model yang tidak dipelajari dari data,
-    tapi harus kita tentukan sebelum training. Contoh:
-      - n_estimators : berapa banyak pohon di dalam Random Forest
-      - max_depth    : seberapa dalam setiap pohon boleh tumbuh
-      - min_samples_split: minimal berapa data untuk membelah cabang pohon
-
-    RandomizedSearchCV vs GridSearchCV:
-    ------------------------------------
-    GridSearchCV   : coba SEMUA kombinasi → lambat jika banyak pilihan
-    RandomizedSearchCV : coba kombinasi ACAK sebanyak n_iter → lebih cepat,
-                         hasil hampir sama bagusnya
-
-    Evaluasi setiap kombinasi menggunakan K-Fold agar fair.
-
-    Parameter:
-    ----------
-    n_iter : int
-        Jumlah kombinasi hyperparameter yang dicoba secara acak.
-
-    Return:
-    -------
-    best_model : RandomForestRegressor dengan hyperparameter terbaik,
-                 sudah ditraining di seluruh data.
+    FITUR:
+    ------
+    1.  coverage_rate          : shift terpenuhi / total shift dibutuhkan
+    2.  avg_dept_weight        : rata-rata bobot tier dept pegawai aktif
+    3.  certified_ratio        : rasio pegawai bersertifikasi dari aktif
+    4.  senior_ratio           : rasio pegawai senior (PG) dari aktif
+    5.  night_ratio            : shift malam / total assignment
+    6.  night_to_morning_ratio : malam→pagi / total assignment
+    7.  cost_ratio             : total_salary / benchmark
+    8.  cluster_balance        : distribusi cluster (0-1)
+    9.  hard_violation_count   : jumlah hard violation (absolut, bukan rasio)
+    10. soft_violation_ratio   : soft violation / total assignment
+    11. dayoff_violation_ratio : dayoff violation / total assignment
+    12. avg_job_level          : rata-rata job_level pegawai aktif
     """
-    print(f"\n[5/8] Hyperparameter Tuning (RandomizedSearchCV, n_iter={n_iter})...")
+    s             = candidate.summary
+    total_assign  = max(s.total_assignments, 1)
+    active_ids    = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
 
-    # Ruang pencarian hyperparameter
-    param_distributions = {
-        "n_estimators":      [50, 100, 150, 200, 300],       # jumlah pohon
-        "max_depth":         [None, 5, 10, 15, 20, 30],      # kedalaman pohon (None=unlimited)
-        "min_samples_split": [2, 4, 6, 8, 10],               # min sampel untuk split
-        "min_samples_leaf":  [1, 2, 4, 6],                   # min sampel di daun
-        "max_features":      ["sqrt", "log2", 0.5, 0.7],     # jumlah fitur per split
-        "bootstrap":         [True, False],                   # apakah pakai bootstrap sampling
+    # Fitur dari pegawai aktif
+    dept_weights, certs, seniors, job_levels = [], [], [], []
+    for eid in active_ids:
+        emp = employees_by_id.get(eid)
+        if emp:
+            tier = DEPT_TIER.get(emp.department or "", 3)
+            dept_weights.append(TIER_WEIGHT[tier])
+            certs.append(1 if getattr(emp, "certifications", 0) >= 1 else 0)
+            seniors.append(1 if (emp.education or "").upper() == "PG" else 0)
+            job_levels.append(float(emp.job_level))
+
+    def m(lst): return float(np.mean(lst)) if lst else 0.0
+
+    sal_feats    = compute_candidate_salary_features(candidate, employees_by_id)
+    actual_total = sal_feats["estimated_total_salary"]
+    benchmark    = BENCHMARK_DAILY_PER_EMP_USD * total_assign
+    cost_ratio   = actual_total / max(benchmark, 1)
+    ntm_ratio    = sal_feats["night_to_morning_count"] / total_assign
+    night_ratio  = s.shift_counts.get("Malam", 0) / total_assign
+    soft_ratio   = s.soft_violation_count / total_assign
+    dayoff_ratio = s.weekly_day_off_violations / total_assign
+
+    return {
+        "coverage_rate":           min(1.0, s.active_employees / max(len(active_ids), 1)),
+        "avg_dept_weight":         m(dept_weights),
+        "certified_ratio":         m(certs),
+        "senior_ratio":            m(seniors),
+        "night_ratio":             night_ratio,
+        "night_to_morning_ratio":  ntm_ratio,
+        "cost_ratio":              cost_ratio,
+        "cluster_balance":         float(s.cluster_balance),
+        "hard_violation_count":    float(s.hard_violation_count),
+        "soft_violation_ratio":    soft_ratio,
+        "dayoff_violation_ratio":  dayoff_ratio,
+        "avg_job_level":           m(job_levels),
     }
 
-    rf_base = RandomForestRegressor(random_state=42, n_jobs=-1)
-
-    # RandomizedSearchCV: pakai K-Fold internal (cv=5) untuk validasi
-    random_search = RandomizedSearchCV(
-        estimator=rf_base,
-        param_distributions=param_distributions,
-        n_iter=n_iter,
-        cv=5,
-        scoring="neg_mean_absolute_error",  # maksimalkan negatif MAE = minimalisasi MAE
-        random_state=42,
-        n_jobs=-1,
-        verbose=0,
-    )
-
-    random_search.fit(X, y)
-
-    best_params = random_search.best_params_
-    print(f"      → Hyperparameter terbaik:")
-    for key, val in best_params.items():
-        print(f"        {key}: {val}")
-
-    best_model = random_search.best_estimator_
-    return best_model
+FEATURE_NAMES = [
+    "coverage_rate", "avg_dept_weight", "certified_ratio", "senior_ratio",
+    "night_ratio", "night_to_morning_ratio", "cost_ratio", "cluster_balance",
+    "hard_violation_count", "soft_violation_ratio", "dayoff_violation_ratio",
+    "avg_job_level",
+]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 8: EVALUASI MODEL SETELAH TUNING
-# ─────────────────────────────────────────────────────────────────────────────
+# ── STEP 4: Build training dataset dari hasil GA ──────────────────────────────
 
-def evaluate_tuned_model(model: RandomForestRegressor, X: pd.DataFrame, y: pd.Series) -> None:
+def build_dataset(all_employees: list[Employee], n_rounds: int = 40) -> tuple[np.ndarray, np.ndarray]:
     """
-    Evaluasi ulang model yang sudah di-tuning menggunakan K-Fold.
+    Generate dataset training dengan menjalankan GA berkali-kali
+    menggunakan variasi subset employee dan requirements.
 
-    Membandingkan apakah tuning benar-benar meningkatkan performa
-    dibanding model baseline.
+    KENAPA variasi:
+      Supaya RF belajar dari kondisi jadwal yang beragam:
+      - Sedikit vs banyak pegawai
+      - Dominasi Tier 1 vs Tier 3
+      - Jadwal 7 hari vs 14 hari
+      Tanpa variasi, RF hanya tahu satu skenario dan tidak bisa generalisasi.
 
-    Metrik yang dihitung:
-    ---------------------
-    MAE  (Mean Absolute Error)       : rata-rata kesalahan prediksi dalam satuan Rupiah
-    RMSE (Root Mean Squared Error)   : seperti MAE tapi lebih sensitif ke error besar
-    R²   (Coefficient of Determination): 0 = model buruk, 1 = model sempurna
+    n_rounds=40 → 40 × 3 kandidat = 120 baris minimum.
     """
-    print(f"\n[6/8] Evaluasi Model Setelah Tuning (K-Fold k=5)...")
+    rng      = np.random.default_rng(42)
+    X_list, y_list = [], []
+    total    = len(all_employees)
 
-    kf = KFold(n_splits=5, shuffle=True, random_state=42)
-    mae_scores, rmse_scores, r2_scores = [], [], []
+    print(f"\n[BUILD DATASET] {n_rounds} rounds × 3 kandidat...")
 
-    for fold_idx, (train_idx, test_idx) in enumerate(kf.split(X), start=1):
-        X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-        y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
+    for r in range(n_rounds):
+        seed = r * 13 + 7
 
-        # Clone model dengan hyperparameter terbaik
-        tuned_clone = RandomForestRegressor(
-            **{k: v for k, v in model.get_params().items()},
-        )
-        tuned_clone.fit(X_train, y_train)
-        y_pred = tuned_clone.predict(X_test)
+        # Variasi subset: 20-100% dari total employee
+        size    = int(rng.integers(max(12, total // 5), total + 1))
+        indices = rng.choice(total, size=size, replace=False)
+        subset  = [all_employees[i] for i in indices]
 
-        mae  = mean_absolute_error(y_test, y_pred)
-        rmse = mean_squared_error(y_test, y_pred) ** 0.5
-        r2   = r2_score(y_test, y_pred)
+        # Assign cluster sederhana berdasarkan job_level
+        for emp in subset:
+            emp.cluster = (emp.job_level - 1) % 4 + 1
 
-        mae_scores.append(mae)
-        rmse_scores.append(rmse)
-        r2_scores.append(r2)
+        # Variasi hari: 7 atau 14
+        n_days = int(rng.choice([7, 14]))
 
-        print(f"      Fold {fold_idx}: MAE={mae:.2f} | RMSE={rmse:.2f} | R²={r2:.4f}")
+        # Requirements dari dept unik di subset
+        dept_ids = list(set(e.department_id for e in subset))
+        reqs     = []
+        req_list = []
+        for did in dept_ids:
+            cnt   = sum(1 for e in subset if e.department_id == did)
+            staff = max(1, min(3, cnt // 4))
+            senior= 1 if did == 1 else 0
+            for sh in ["Pagi", "Sore", "Malam"]:
+                reqs.append(DepartmentShiftRequirement(
+                    department_id=did, shift=sh,
+                    required_staff=staff, required_senior=senior,
+                ))
+                req_list.append({"department_id": did, "shift": sh,
+                                 "required_staff": staff, "required_senior": senior})
 
-    print(f"\n      ── Rata-rata Model Tuned ──")
-    print(f"      MAE  : {np.mean(mae_scores):.2f}  (±{np.std(mae_scores):.2f})")
-    print(f"      RMSE : {np.mean(rmse_scores):.2f}  (±{np.std(rmse_scores):.2f})")
-    print(f"      R²   : {np.mean(r2_scores):.4f} (±{np.std(r2_scores):.4f})")
+        try:
+            request = GenerateScheduleRequest(
+                employees=subset,
+                start_date=date(2025, 1, 6),
+                days=n_days, candidates=3,
+                requirements=reqs,
+                ga_parameters=GAParameters(
+                    population_size=25, generations=35,
+                    elite_count=2, tournament_size=3,
+                    crossover_parent_one_rate=0.8, mutation_rate=0.08,
+                ),
+                seed=seed,
+            )
+            candidates = generate_candidates(request)
+            emp_map    = {e.id: e for e in subset}
 
-    # Feature importance — kolom apa yang paling berpengaruh?
-    print(f"\n      ── Feature Importance (Top 10) ──")
-    importances = pd.Series(model.feature_importances_, index=X.columns)
-    top10 = importances.sort_values(ascending=False).head(10)
-    for feat, imp in top10.items():
-        bar = "█" * int(imp * 40)
-        print(f"      {feat:30s} {bar} ({imp:.4f})")
+            scores = [compute_profit_score(c, emp_map, req_list) for c in candidates]
+            print(f"  Round {r+1:2d}/{n_rounds}: {size} emps | {n_days}d | scores={[round(s,1) for s in scores]}")
+
+            for c, score in zip(candidates, scores):
+                feats = extract_schedule_features(c, emp_map)
+                X_list.append([feats[fn] for fn in FEATURE_NAMES])
+                y_list.append(score)
+
+        except Exception as e:
+            print(f"  Round {r+1:2d}/{n_rounds}: SKIP — {e}")
+
+    X = np.array(X_list)
+    y = np.array(y_list)
+    print(f"\n[BUILD DATASET] Selesai: {len(X)} baris")
+    print(f"  profit_score: min={y.min():.1f} max={y.max():.1f} mean={y.mean():.1f} std={y.std():.1f}")
+    return X, y
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# LANGKAH 9: SIMPAN MODEL
-# ─────────────────────────────────────────────────────────────────────────────
+# ── STEP 5: Training RF ───────────────────────────────────────────────────────
 
-def save_model(model: RandomForestRegressor, feature_names: list[str]) -> None:
-    """
-    Simpan model terlatih dan daftar nama fitur ke disk.
-
-    Kenapa perlu simpan feature_names?
-    ------------------------------------
-    Saat prediksi di rf_service.py, input harus punya kolom yang SAMA PERSIS
-    (nama dan urutan) dengan saat training. Menyimpan feature_names memastikan
-    konsistensi ini.
-
-    File output:
-    ------------
-    models/rf_salary_model.joblib   → model Random Forest
-    models/rf_feature_names.joblib  → list nama kolom fitur
-    """
+def train(X: np.ndarray, y: np.ndarray) -> None:
     os.makedirs(MODEL_DIR, exist_ok=True)
-    joblib.dump(model, MODEL_PATH)
-    joblib.dump(feature_names, FEATURE_NAMES_PATH)
 
-    size_kb = os.path.getsize(MODEL_PATH) / 1024
-    print(f"\n[7/8] Model disimpan:")
-    print(f"      → {MODEL_PATH} ({size_kb:.1f} KB)")
-    print(f"      → {FEATURE_NAMES_PATH}")
+    print(f"\n[TRAINING] Dataset: {X.shape[0]} baris × {X.shape[1]} fitur")
+
+    # Train/test split 80/20 — test disisihkan dulu
+    X_tr, X_te, y_tr, y_te = train_test_split(X, y, test_size=0.2, random_state=42)
+    print(f"  Train={len(X_tr)} | Test={len(X_te)}")
+
+    # K-Fold baseline
+    print(f"\n[K-FOLD BASELINE] k=5 di train set...")
+    kf        = KFold(n_splits=5, shuffle=True, random_state=42)
+    base_rf   = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+    mae_folds, rmse_folds, r2_folds = [], [], []
+
+    for fold, (tr_i, val_i) in enumerate(kf.split(X_tr), 1):
+        m = RandomForestRegressor(n_estimators=100, random_state=42, n_jobs=-1)
+        m.fit(X_tr[tr_i], y_tr[tr_i])
+        pred    = m.predict(X_tr[val_i])
+        mae_folds.append(mean_absolute_error(y_tr[val_i], pred))
+        rmse_folds.append(mean_squared_error(y_tr[val_i], pred) ** 0.5)
+        r2_folds.append(r2_score(y_tr[val_i], pred))
+        print(f"  Fold {fold}: MAE={mae_folds[-1]:.3f} RMSE={rmse_folds[-1]:.3f} R²={r2_folds[-1]:.4f}")
+
+    print(f"  Avg: MAE={np.mean(mae_folds):.3f} RMSE={np.mean(rmse_folds):.3f} R²={np.mean(r2_folds):.4f}")
+
+    base_rf.fit(X_tr, y_tr)
+
+    # Hyperparameter tuning
+    print(f"\n[TUNING] RandomizedSearchCV (n_iter=40, cv=5) di train set...")
+    param_dist = {
+        "n_estimators":      [50, 100, 150, 200, 300],
+        "max_depth":         [None, 5, 10, 15, 20],
+        "min_samples_split": [2, 4, 6, 10],
+        "min_samples_leaf":  [1, 2, 4],
+        "max_features":      ["sqrt", "log2", 0.5, 0.7],
+        "bootstrap":         [True, False],
+    }
+    search = RandomizedSearchCV(
+        RandomForestRegressor(random_state=42, n_jobs=-1),
+        param_dist, n_iter=40, cv=5,
+        scoring="neg_mean_absolute_error",
+        random_state=42, n_jobs=-1, verbose=0,
+    )
+    search.fit(X_tr, y_tr)
+    tuned_rf = search.best_estimator_
+    print(f"  Best params: {search.best_params_}")
+    print(f"  Best CV MAE: {-search.best_score_:.3f}")
+
+    # Evaluasi final di test set
+    print(f"\n{'='*55}")
+    print(f"EVALUASI METRIK FINAL")
+    print(f"{'='*55}")
+
+    def _eval(model, X, y, label):
+        pred = model.predict(X)
+        mae  = mean_absolute_error(y, pred)
+        rmse = mean_squared_error(y, pred) ** 0.5
+        r2   = r2_score(y, pred)
+        print(f"\n  [{label}]")
+        print(f"    MAE  : {mae:.4f}")
+        print(f"    RMSE : {rmse:.4f}  (selalu ≥ MAE, ini normal)")
+        print(f"    R²   : {r2:.4f}")
+        return mae, rmse, r2
+
+    print("\n  -- Training Set --")
+    _eval(base_rf,  X_tr, y_tr, "Baseline - Train")
+    _eval(tuned_rf, X_tr, y_tr, "Tuned    - Train")
+    print("\n  -- Test Set (belum pernah dilihat model) --")
+    b_mae, _, _  = _eval(base_rf,  X_te, y_te, "Baseline - Test")
+    t_mae, _, _  = _eval(tuned_rf, X_te, y_te, "Tuned    - Test")
+
+    best_model = tuned_rf if t_mae <= b_mae else base_rf
+    label      = "TUNED" if t_mae <= b_mae else "BASELINE"
+    print(f"\n  → Model {label} dipilih (MAE test lebih rendah)")
+
+    # Feature importance
+    print(f"\n  Feature Importance (top 5):")
+    imp = pd.Series(best_model.feature_importances_, index=FEATURE_NAMES).sort_values(ascending=False)
+    for feat, val in imp.head(5).items():
+        print(f"    {feat:30s} {val:.4f}")
+
+    # Simpan
+    joblib.dump(best_model, MODEL_PATH)
+    joblib.dump(FEATURE_NAMES, FEAT_PATH)
+    print(f"\n✅ Model disimpan: {MODEL_PATH}")
+    print(f"{'='*55}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# MAIN — Jalankan semua langkah secara berurutan
-# ─────────────────────────────────────────────────────────────────────────────
+# ── MAIN ──────────────────────────────────────────────────────────────────────
 
-def main() -> None:
-    print("=" * 60)
-    print("  SHIFTLY — Training Random Forest Salary Predictor")
-    print("=" * 60)
+def main():
+    print("=" * 55)
+    print("  SHIFTLY — RF Profit Score Training Pipeline")
+    print("=" * 55)
 
-    # 1. Load data
-    df = load_data(CSV_PATH)
+    print("\n[STEP 1] Load employees dari CSV...")
+    employees = load_employees(CSV_PATH)
+    print(f"  {len(employees)} employees dimuat")
 
-    # 2. Feature engineering
-    df = feature_engineering(df)
+    # Cluster sederhana untuk seluruh pool
+    for emp in employees:
+        emp.cluster = (emp.job_level - 1) % 4 + 1
 
-    # 3 & 4. Persiapan fitur + encoding
-    X, y, feature_names = prepare_features(df)
+    print("\n[STEP 2-3] Build training dataset dari GA...")
+    X, y = build_dataset(employees, n_rounds=40)
 
-    # 5 & 6. K-Fold baseline
-    _ = evaluate_with_kfold(X, y, n_folds=N_FOLDS)
+    if len(X) < 30:
+        print("Dataset terlalu kecil, tambah n_rounds")
+        sys.exit(1)
 
-    # 7. Hyperparameter tuning
-    best_model = hyperparameter_tuning(X, y, n_iter=N_ITER_SEARCH)
+    print("\n[STEP 4] Training Random Forest...")
+    train(X, y)
 
-    # 8. Evaluasi setelah tuning
-    evaluate_tuned_model(best_model, X, y)
-
-    # 9. Simpan model
-    save_model(best_model, feature_names)
-
-    print(f"\n[8/8] ✓ Training selesai! Model siap dipakai oleh rf_service.py")
-    print("=" * 60)
+    print("\n✅ Selesai! Restart FastAPI untuk load model baru.")
 
 
 if __name__ == "__main__":

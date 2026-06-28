@@ -32,11 +32,11 @@ class ScheduleController extends Controller
     {
         $departments = Department::where('is_active', true)->get();
         $employees = Employee::with('department')->active()->whereNotNull('cluster_label')->get();
-        
+
         $stats = [
             'total_employees' => Employee::active()->count(),
-            'clustered' => Employee::active()->whereNotNull('cluster_label')->count(),
-            'departments' => $departments->count(),
+            'clustered'       => Employee::active()->whereNotNull('cluster_label')->count(),
+            'departments'     => $departments->count(),
         ];
 
         return view('manager.schedules.create', compact('departments', 'employees', 'stats'));
@@ -45,14 +45,14 @@ class ScheduleController extends Controller
     public function generate(Request $request)
     {
         $validated = $request->validate([
-            'start_date' => 'required|date',
-            'days' => 'required|integer|min:1|max:31',
-            'employee_ids' => 'required|array|min:1',
+            'start_date'     => 'required|date',
+            'days'           => 'required|integer|min:1|max:31',
+            'employee_ids'   => 'required|array|min:1',
             'employee_ids.*' => 'exists:employees,id',
-            'candidates' => 'integer|min:1|max:5',
+            'candidates'     => 'integer|min:1|max:5',
         ]);
 
-        // Get filtered employees from pool
+        // ── Ambil employees yang dipilih ──────────────────────────────────────
         $employees = Employee::with('department')
             ->whereIn('id', $validated['employee_ids'])
             ->active()
@@ -62,70 +62,86 @@ class ScheduleController extends Controller
             return back()->with('error', 'No employees selected for scheduling.');
         }
 
-        // Check if all selected employees have cluster labels
         if ($employees->whereNull('cluster_label')->isNotEmpty()) {
             return back()->with('error', 'Some selected employees have not been clustered yet. Please run clustering first.');
         }
 
-        // Get shift requirements
+        // ── Shift requirements ────────────────────────────────────────────────
         $requirements = DepartmentShiftRequirement::where('is_active', true)->get();
 
-        // Prepare payload for Python AI service
-        $payload = [
-            'employees' => $employees->map(fn($emp) => [
-                'id' => $emp->id,
-                'name' => $emp->name,
-                'department_id' => $emp->department_id,
-                'department' => $emp->department->name,
-                'education' => $emp->education,
-                'job_level' => $emp->job_level,
-                'age' => $emp->age,
-                'salary' => (float) $emp->salary,
-                'rating' => (float) $emp->rating,
-                'certifications' => $emp->certifications,
-                'cluster' => $emp->cluster_label,
-                'is_senior' => $emp->is_senior,
-            ])->toArray(),
-            'start_date' => $validated['start_date'],
-            'days' => $validated['days'],
-            'candidates' => $validated['candidates'] ?? 3,
-            'requirements' => $requirements->map(fn($req) => [
-                'department_id' => $req->department_id,
-                'shift' => $req->shift,
+        // ── Tuning GA berdasarkan ukuran input ────────────────────────────────
+        $employeeCount = $employees->count();
+        $days          = $validated['days'];
+        $populationSize = $employeeCount >= 300 ? 24 : ($employeeCount >= 180 ? 30 : 40);
+        $generations    = $employeeCount >= 300 ? 40 : ($employeeCount >= 180 ? 55 : 80);
+
+        if ($days > 14) {
+            $populationSize = max(20, $populationSize - 4);
+            $generations    = max(30, $generations - 10);
+        }
+
+        // ── Siapkan data employees satu kali ─────────────────────────────────
+        // Array ini DIPAKAI ULANG untuk payload GA maupun payload RF agar RF
+        // mendapat data nyata pegawai (age, job_level, education, dll.) dan
+        // bukan fallback default yang menyebabkan rf_profit_score = 0%.
+        $employeeData = $employees->map(fn($emp) => [
+            'id'            => $emp->id,
+            'name'          => $emp->name,
+            'department_id' => $emp->department_id,
+            'department'    => $emp->department->name,
+            'education'     => $emp->education,
+            'job_level'     => $emp->job_level,
+            'age'           => $emp->age,
+            'salary'        => (float) $emp->salary,
+            'rating'        => (float) $emp->rating,
+            'certifications'=> (int) ($emp->certifications ?? 0),
+            'satisfied'     => (float) ($emp->satisfied ?? 0.5),
+            'cluster'       => $emp->cluster_label,
+            'is_senior'     => $emp->is_senior,
+        ])->toArray();
+
+        // ── Payload GA ────────────────────────────────────────────────────────
+        $gaPayload = [
+            'employees'     => $employeeData,
+            'start_date'    => $validated['start_date'],
+            'days'          => $validated['days'],
+            'candidates'    => $validated['candidates'] ?? 3,
+            'requirements'  => $requirements->map(fn($req) => [
+                'department_id'  => $req->department_id,
+                'shift'          => $req->shift,
                 'required_staff' => $req->required_staff,
-                'required_senior' => $req->required_senior,
+                'required_senior'=> $req->required_senior,
             ])->toArray(),
             'ga_parameters' => [
-                'population_size' => 40,
-                'generations' => 80,
-                'elite_count' => 2,
-                'tournament_size' => 4,
-                'crossover_parent_one_rate' => 0.8,
-                'mutation_rate' => 0.08,
+                'population_size'          => $populationSize,
+                'generations'              => $generations,
+                'elite_count'              => 2,
+                'tournament_size'          => 4,
+                'crossover_parent_one_rate'=> 0.8,
+                'mutation_rate'            => 0.08,
             ],
-            'seed' => 42,
+            // Gunakan seed acak per request supaya GA tidak menghasilkan kandidat yang sama terus.
+            // (Kalau seed fix, GA deterministic → output cenderung sama.)
+            'seed' => random_int(1, PHP_INT_MAX),
         ];
 
         try {
-            // Call Python AI Service - Generate schedules with GA
-            $gaResponse = $this->aiService->generateSchedules($payload);
-            
-            if (empty($gaResponse['candidates'])) {
-                return back()->with('error', 'GA failed to generate schedule candidates.');
-            }
-
-            // Call Python AI Service - Evaluate candidates with Random Forest
-            $rfResponse = $this->aiService->evaluateCandidates([
-                'candidates' => $gaResponse['candidates']
-            ]);
-
+            // Gunakan pipeline GA+RF sekaligus supaya hasil yang disimpan di DB
+            // benar-benar berasal dari kandidat terbaru dan RF pakai payload yang sama.
+            $rfResponse = $this->aiService->generateAndEvaluate($gaPayload);
             $evaluatedCandidates = $rfResponse['candidates'] ?? [];
 
-            // Store candidates in session for comparison
+
+            if (empty($evaluatedCandidates)) {
+                return back()->with('error', 'No candidates returned from GA+RF pipeline.');
+            }
+
+
+            // ── Simpan ke session ─────────────────────────────────────────────
             session(['schedule_candidates' => $evaluatedCandidates]);
-            session(['schedule_pool_info' => [
-                'start_date' => $validated['start_date'],
-                'days' => $validated['days'],
+            session(['schedule_pool_info'  => [
+                'start_date'     => $validated['start_date'],
+                'days'           => $validated['days'],
                 'employee_count' => $employees->count(),
             ]]);
 
@@ -140,7 +156,7 @@ class ScheduleController extends Controller
     public function compare()
     {
         $candidates = session('schedule_candidates', []);
-        $poolInfo = session('schedule_pool_info', []);
+        $poolInfo   = session('schedule_pool_info', []);
 
         if (empty($candidates)) {
             return redirect()->route('manager.schedules.create')
@@ -185,9 +201,8 @@ class ScheduleController extends Controller
             'candidate_id' => 'required|string',
         ]);
 
-        $candidates = session('schedule_candidates', []);
-        $poolInfo = session('schedule_pool_info', []);
-
+        $candidates        = session('schedule_candidates', []);
+        $poolInfo          = session('schedule_pool_info', []);
         $selectedCandidate = collect($candidates)->firstWhere('candidate_id', $validated['candidate_id']);
 
         if (!$selectedCandidate) {
@@ -196,51 +211,46 @@ class ScheduleController extends Controller
 
         DB::beginTransaction();
         try {
-            // Create ScheduleRun
             $scheduleRun = ScheduleRun::create([
-                'manager_id' => Auth::id(),
-                'name' => 'Schedule ' . now()->format('Y-m-d H:i'),
-                'start_date' => $poolInfo['start_date'],
-                'end_date' => date('Y-m-d', strtotime($poolInfo['start_date'] . ' + ' . ($poolInfo['days'] - 1) . ' days')),
-                'days' => $poolInfo['days'],
-                'status' => 'published',
+                'manager_id'   => Auth::id(),
+                'name'         => 'Schedule ' . now()->format('Y-m-d H:i'),
+                'start_date'   => $poolInfo['start_date'],
+                'end_date'     => date('Y-m-d', strtotime($poolInfo['start_date'] . ' + ' . ($poolInfo['days'] - 1) . ' days')),
+                'days'         => $poolInfo['days'],
+                'status'       => 'published',
                 'generated_at' => now(),
                 'published_at' => now(),
             ]);
 
-            // Create ScheduleCandidate
             $candidate = ScheduleCandidate::create([
-                'schedule_run_id' => $scheduleRun->id,
-                'candidate_code' => $selectedCandidate['candidate_id'],
-                'ga_fitness' => $selectedCandidate['summary']['ga_fitness'],
-                'rf_profit_score' => $selectedCandidate['rf_profit_score'] ?? null,
-                'total_salary' => $selectedCandidate['summary']['total_salary'],
-                'active_employees' => $selectedCandidate['summary']['active_employees'],
-                'total_assignments' => $selectedCandidate['summary']['total_assignments'],
-                'cluster_balance' => $selectedCandidate['summary']['cluster_balance'] ?? null,
+                'schedule_run_id'      => $scheduleRun->id,
+                'candidate_code'       => $selectedCandidate['candidate_id'],
+                'ga_fitness'           => $selectedCandidate['summary']['ga_fitness'],
+                'rf_profit_score'      => $selectedCandidate['rf_profit_score'] ?? null,
+                'total_salary'         => $selectedCandidate['summary']['total_salary'],
+                'active_employees'     => $selectedCandidate['summary']['active_employees'],
+                'total_assignments'    => $selectedCandidate['summary']['total_assignments'],
+                'cluster_balance'      => $selectedCandidate['summary']['cluster_balance'] ?? null,
                 'hard_violation_count' => $selectedCandidate['summary']['hard_violation_count'] ?? 0,
                 'soft_violation_count' => $selectedCandidate['summary']['soft_violation_count'] ?? 0,
-                'shift_counts' => $selectedCandidate['summary']['shift_counts'] ?? [],
-                'status' => 'selected',
+                'shift_counts'         => $selectedCandidate['summary']['shift_counts'] ?? [],
+                'status'               => 'selected',
             ]);
 
-            // Create ScheduleEntries
             foreach ($selectedCandidate['assignments'] as $assignment) {
                 ScheduleEntry::create([
                     'schedule_candidate_id' => $candidate->id,
-                    'employee_id' => $assignment['employee_id'],
-                    'department_id' => $assignment['department_id'],
-                    'shift_date' => $assignment['date'],
-                    'shift' => $assignment['shift'],
-                    'cluster_label' => $assignment['cluster_label'] ?? null,
-                    'is_senior_snapshot' => $assignment['is_senior_snapshot'] ?? false,
-                    'salary_snapshot' => $assignment['salary_snapshot'] ?? null,
+                    'employee_id'           => $assignment['employee_id'],
+                    'department_id'         => $assignment['department_id'],
+                    'shift_date'            => $assignment['date'],
+                    'shift'                 => $assignment['shift'],
+                    'cluster_label'         => $assignment['cluster_label'] ?? null,
+                    'is_senior_snapshot'    => $assignment['is_senior_snapshot'] ?? false,
+                    'salary_snapshot'       => $assignment['salary_snapshot'] ?? null,
                 ]);
             }
 
             DB::commit();
-
-            // Clear session
             session()->forget(['schedule_candidates', 'schedule_pool_info']);
 
             return redirect()->route('manager.schedules.show', $scheduleRun)
@@ -255,14 +265,12 @@ class ScheduleController extends Controller
     public function show(ScheduleRun $schedule)
     {
         $schedule->load(['selectedCandidate.entries.employee.department']);
-        
         return view('manager.schedules.show', compact('schedule'));
     }
 
     public function destroy(ScheduleRun $schedule)
     {
         $schedule->update(['status' => 'archived', 'archived_at' => now()]);
-        
         return redirect()->route('manager.schedules.index')
             ->with('success', 'Schedule archived successfully.');
     }
