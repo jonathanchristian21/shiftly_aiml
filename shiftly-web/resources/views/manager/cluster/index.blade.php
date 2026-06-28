@@ -140,6 +140,7 @@
     </div>
     
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        @php ksort($clusterAnalysis); @endphp
         @foreach($clusterAnalysis as $label => $analysis)
         <div class="border border-gray-200 rounded-lg p-5 card-hover">
             <div class="flex items-center gap-3 mb-4">
@@ -218,24 +219,15 @@
                 <div class="text-tiny mb-2">CLUSTER INTERPRETATION</div>
                 <div class="text-caption bg-gray-50 rounded-lg p-3 mono leading-relaxed">
                     @php
-                        // Label cluster di database adalah 1,2,3,4
-                        if ($label == 1) {
-                            echo '<span class="text-emerald-600">● SHIFT LEADERS (A)</span><br>';
-                            echo 'Senior (PG), High Level & Salary';
-                        } elseif ($label == 2) {
-                            echo '<span class="text-sky">● EXECUTORS (B)</span><br>';
-                            echo 'Junior (UG), Lower Level & Salary';
-                        } elseif ($label == 3) {
-                            echo '<span class="text-purple-600">● STABILIZERS (C)</span><br>';
-                            echo 'Mid-level, High Rating/Satisfied';
-                        } elseif ($label == 4) {
-                            echo '<span class="text-amber-600">● WATCHLIST (D)</span><br>';
-                            echo 'Lower Rating/Satisfied, Risk of Burnout';
-                        } else {
-                            echo '<span class="text-gray-600">● UNKNOWN PROFILE</span><br>';
-                            echo 'Unmapped characteristics';
-                        }
+                        $profile = $analysis['profile'] ?? null;
                     @endphp
+                    @if($profile)
+                        <span class="{{ $profile['color'] }}">● {{ $profile['name'] }}</span><br>
+                        {{ $profile['short'] }}
+                    @else
+                        <span class="text-gray-600">● UNKNOWN PROFILE</span><br>
+                        Unmapped characteristics
+                    @endif
                 </div>
             </div>
             
