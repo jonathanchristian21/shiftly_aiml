@@ -63,70 +63,130 @@
 
     <div class="card p-6 mb-6">
         <div class="flex items-center justify-between mb-4">
-            <h2 class="text-title">Employee Pool</h2>
-            <div class="flex items-center space-x-2">
-                <button type="button" onclick="selectAll()" class="text-caption text-blue-600 hover:underline">SELECT ALL</button>
-                <span class="text-gray-300">|</span>
-                <button type="button" onclick="deselectAll()" class="text-caption text-gray-600 hover:underline">CLEAR</button>
+            <div>
+                <h2 class="text-title">Employee Pool Selection</h2>
+                <p class="text-caption text-ink-mute mt-1">Select employees to include in schedule generation</p>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="selectAllVisible()" class="btn btn-success btn-sm">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                    </svg>
+                    Select All
+                </button>
+                <button type="button" onclick="deselectAll()" class="btn btn-secondary btn-sm">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    Clear
+                </button>
             </div>
         </div>
-        
-        <div class="mb-4 flex gap-2 flex-wrap">
-            <select id="filterDept" class="text-caption">
-                <option value="">All Departments</option>
-                @foreach($departments as $dept)
-                    <option value="{{ $dept->id }}">{{ $dept->name }}</option>
-                @endforeach
-            </select>
-            <select id="filterEdu" class="text-caption">
-                <option value="">All Education</option>
-                <option value="PG">PG</option>
-                <option value="UG">UG</option>
-            </select>
-            <select id="filterLevel" class="text-caption">
-                <option value="">All Levels</option>
-                @for($i = 1; $i <= 5; $i++)
-                    <option value="{{ $i }}">{{ $i }}</option>
-                @endfor
-            </select>
-            <select id="filterCluster" class="text-caption">
-                <option value="">All Clusters</option>
-                @for($i = 1; $i <= 4; $i++)
-                    <option value="{{ $i }}">{{ $i }}</option>
-                @endfor
-            </select>
-            <button type="button" onclick="applyFilter()" class="btn btn-secondary text-xs">FILTER</button>
+
+        <!-- Filters -->
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-3 mb-4">
+            <div>
+                <label class="text-tiny mb-1 block">Department</label>
+                <select id="filterDept" class="w-full" onchange="applyFilters()">
+                    <option value="">All</option>
+                    @foreach($departments as $dept)
+                        <option value="{{ $dept->id }}">{{ $dept->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
+                <label class="text-tiny mb-1 block">Cluster</label>
+                <select id="filterCluster" class="w-full" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="1">Cluster 1</option>
+                    <option value="2">Cluster 2</option>
+                    <option value="3">Cluster 3</option>
+                    <option value="4">Cluster 4</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-tiny mb-1 block">Education</label>
+                <select id="filterEdu" class="w-full" onchange="applyFilters()">
+                    <option value="">All</option>
+                    <option value="PG">PG</option>
+                    <option value="UG">UG</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-tiny mb-1 block">Job Level</label>
+                <select id="filterLevel" class="w-full" onchange="applyFilters()">
+                    <option value="">All</option>
+                    @for($i = 1; $i <= 5; $i++)
+                        <option value="{{ $i }}">Level {{ $i }}</option>
+                    @endfor
+                </select>
+            </div>
+            <div>
+                <label class="text-tiny mb-1 block">Search</label>
+                <input type="text" id="searchBox" placeholder="Name or code..." class="w-full" oninput="applyFilters()">
+            </div>
         </div>
 
-        <div class="overflow-auto" style="max-height: 400px;">
-            <table class="table-minimal w-full">
-                <thead style="position: sticky; top: 0; background: white; z-index: 10;">
+        <!-- Table -->
+        <div class="overflow-x-auto" style="max-height: 500px;">
+            <table class="table-minimal">
+                <thead class="sticky top-0 bg-white z-10">
                     <tr>
-                        <th class="w-12"><input type="checkbox" id="selectAllCb" onclick="toggleAll(this)"></th>
-                        <th>CODE</th>
-                        <th>NAME</th>
-                        <th>DEPT</th>
-                        <th>EDU</th>
-                        <th>LVL</th>
-                        <th>CLUSTER</th>
+                        <th class="w-12">
+                            <input type="checkbox" id="selectAllCb" class="w-4 h-4" onchange="toggleAll(this)">
+                        </th>
+                        <th>Code</th>
+                        <th>Name</th>
+                        <th>Department</th>
+                        <th>Education</th>
+                        <th>Level</th>
+                        <th>Cluster</th>
                     </tr>
                 </thead>
-                <tbody id="employeeTable">
+                <tbody>
                     @forelse($employees as $emp)
-                    <tr data-dept="{{ $emp->department_id }}" data-edu="{{ $emp->education }}" data-level="{{ $emp->job_level }}" data-cluster="{{ $emp->cluster_label }}">
-                        <td><input type="checkbox" name="employee_ids[]" value="{{ $emp->id }}" class="emp-cb" onchange="updateCount()"></td>
-                        <td class="text-mono text-caption">{{ $emp->employee_code }}</td>
-                        <td class="font-semibold">{{ $emp->name }}</td>
-                        <td class="text-caption">{{ substr($emp->department->name, 0, 20) }}</td>
-                        <td><span class="badge badge-{{ $emp->education === 'PG' ? 'success' : 'primary' }}">{{ $emp->education }}</span></td>
-                        <td class="text-mono">{{ $emp->job_level }}</td>
-                        <td><span class="badge badge-secondary">C{{ $emp->cluster_label }}</span></td>
+                    <tr class="employee-row"
+                        data-id="{{ $emp->id }}"
+                        data-dept="{{ $emp->department_id }}"
+                        data-edu="{{ $emp->education }}"
+                        data-level="{{ $emp->job_level }}"
+                        data-cluster="{{ $emp->cluster_label }}"
+                        data-name="{{ strtolower($emp->name) }}"
+                        data-code="{{ strtolower($emp->employee_code) }}">
+                        <td>
+                            <input type="checkbox" name="employee_ids[]" value="{{ $emp->id }}" class="emp-cb w-4 h-4" onchange="updateCount()">
+                        </td>
+                        <td class="mono font-semibold">{{ $emp->employee_code }}</td>
+                        <td class="font-medium">{{ $emp->name }}</td>
+                        <td class="text-caption">{{ $emp->department->name }}</td>
+                        <td>
+                            <span class="badge {{ $emp->education === 'PG' ? 'badge-success' : 'badge-primary' }}">
+                                {{ $emp->education }}
+                            </span>
+                        </td>
+                        <td class="mono">{{ $emp->job_level }}</td>
+                        <td>
+                            <span class="badge 
+                                {{ $emp->cluster_label == 1 ? 'badge-success' : '' }}
+                                {{ $emp->cluster_label == 2 ? 'badge-primary' : '' }}
+                                {{ $emp->cluster_label == 3 ? 'badge-warning' : '' }}
+                                {{ $emp->cluster_label == 4 ? 'badge-secondary' : '' }}">
+                                C{{ $emp->cluster_label }}
+                            </span>
+                        </td>
                     </tr>
                     @empty
-                    <tr><td colspan="7" class="text-center text-gray-400 py-8">No clustered employees</td></tr>
+                    <tr>
+                        <td colspan="7" class="text-center text-caption py-8">No clustered employees. Run K-Means Clustering first.</td>
+                    </tr>
                     @endforelse
                 </tbody>
             </table>
+        </div>
+        
+        <div class="mt-4 pt-4 border-t flex items-center justify-between">
+            <span class="text-caption">Showing <span id="visibleCount" class="font-semibold">0</span> employees</span>
+            <span class="text-body font-semibold">Selected: <span id="selectedDisplay" class="text-sky">0</span></span>
         </div>
     </div>
 
@@ -143,12 +203,60 @@
 
 <script>
 function updateCount() {
-    document.getElementById('selectedCount').textContent = document.querySelectorAll('.emp-cb:checked').length;
+    const checked = document.querySelectorAll('.emp-cb:checked').length;
+    const total = document.querySelectorAll('.employee-row').length;
+    document.getElementById('selectedCount').textContent = checked;
+    document.getElementById('selectedDisplay').textContent = checked;
+    
+    // Update select all checkbox
+    const selectAllCb = document.getElementById('selectAllCb');
+    if (selectAllCb) {
+        const visible = document.querySelectorAll('.employee-row:not([style*="display: none"])');
+        const visibleChecked = Array.from(visible).filter(row => row.querySelector('.emp-cb').checked).length;
+        selectAllCb.checked = visible.length > 0 && visibleChecked === visible.length;
+    }
 }
 
-function selectAll() {
-    document.querySelectorAll('.emp-cb').forEach(cb => {
-        if (cb.closest('tr').style.display !== 'none') cb.checked = true;
+function toggleAll(checkbox) {
+    document.querySelectorAll('.employee-row').forEach(row => {
+        if (row.style.display !== 'none') {
+            row.querySelector('.emp-cb').checked = checkbox.checked;
+        }
+    });
+    updateCount();
+}
+
+function applyFilters() {
+    const dept = document.getElementById('filterDept').value;
+    const edu = document.getElementById('filterEdu').value;
+    const level = document.getElementById('filterLevel').value;
+    const cluster = document.getElementById('filterCluster').value;
+    const search = document.getElementById('searchBox').value.toLowerCase();
+    
+    let visibleCount = 0;
+    document.querySelectorAll('.employee-row').forEach(row => {
+        const matchDept = !dept || row.dataset.dept === dept;
+        const matchEdu = !edu || row.dataset.edu === edu;
+        const matchLevel = !level || row.dataset.level === level;
+        const matchCluster = !cluster || row.dataset.cluster === cluster;
+        const matchSearch = !search || 
+            row.dataset.name.includes(search) || 
+            row.dataset.code.includes(search);
+        
+        const match = matchDept && matchEdu && matchLevel && matchCluster && matchSearch;
+        row.style.display = match ? '' : 'none';
+        if (match) visibleCount++;
+    });
+    
+    document.getElementById('visibleCount').textContent = visibleCount;
+    updateCount();
+}
+
+function selectAllVisible() {
+    document.querySelectorAll('.employee-row').forEach(row => {
+        if (row.style.display !== 'none') {
+            row.querySelector('.emp-cb').checked = true;
+        }
     });
     updateCount();
 }
@@ -158,40 +266,22 @@ function deselectAll() {
     updateCount();
 }
 
-function toggleAll(src) {
-    document.querySelectorAll('.emp-cb').forEach(cb => {
-        if (cb.closest('tr').style.display !== 'none') cb.checked = src.checked;
-    });
-    updateCount();
-}
-
-function applyFilter() {
-    const dept = document.getElementById('filterDept').value;
-    const edu = document.getElementById('filterEdu').value;
-    const level = document.getElementById('filterLevel').value;
-    const cluster = document.getElementById('filterCluster').value;
-    
-    document.querySelectorAll('#employeeTable tr').forEach(row => {
-        if (!row.dataset.dept) return;
-        const match = (!dept || row.dataset.dept === dept) &&
-                     (!edu || row.dataset.edu === edu) &&
-                     (!level || row.dataset.level === level) &&
-                     (!cluster || row.dataset.cluster === cluster);
-        row.style.display = match ? '' : 'none';
-    });
-    updateCount();
-}
-
 document.getElementById('generateForm').addEventListener('submit', function(e) {
     const count = document.querySelectorAll('.emp-cb:checked').length;
     if (count === 0) {
         e.preventDefault();
-        alert('Select at least 1 employee');
+        alert('Please select at least 1 employee');
         return;
     }
-    if (!confirm(`Generate with ${count} employees?`)) {
+    if (!confirm(`Generate schedule with ${count} employees?`)) {
         e.preventDefault();
     }
+});
+
+// Initialize
+document.addEventListener('DOMContentLoaded', function() {
+    applyFilters();
+    updateCount();
 });
 </script>
 @endsection

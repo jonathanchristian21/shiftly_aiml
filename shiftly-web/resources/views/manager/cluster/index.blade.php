@@ -81,14 +81,7 @@
                 </div>
             </div>
             
-            <div class="border-l-4 border-sky pl-4">
-                <div class="text-body font-semibold mb-2">🔗 Connection to Genetic Algorithm</div>
-                <p class="text-caption leading-relaxed">
-                    When GA creates <strong>initial population</strong>, each shift per department is guaranteed to be filled with <strong>at least 1 employee from Senior Cluster (Profile A)</strong>. 
-                    This makes the initial population already meet the hard constraint "minimum 1 PG per shift" from the first iteration, 
-                    so <strong>GA converges faster</strong> than random initialization.
-                </p>
-            </div>
+
         </div>
     </div>
 </div>
@@ -151,10 +144,10 @@
         <div class="border border-gray-200 rounded-lg p-5 card-hover">
             <div class="flex items-center gap-3 mb-4">
                 <div class="w-12 h-12 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%);">
-                    <span class="text-white font-bold text-lg mono">{{ $label}}</span>
+                    <span class="text-white font-bold text-lg mono">{{ $label }}</span>
                 </div>
                 <div>
-                    <div class="text-tiny">CLUSTER {{ $label}}</div>
+                    <div class="text-tiny">CLUSTER {{ $label }}</div>
                     <div class="text-2xl font-bold text-ink mono">{{ $analysis['count'] }}</div>
                     <div class="text-caption">employees</div>
                 </div>
@@ -225,17 +218,17 @@
                 <div class="text-tiny mb-2">CLUSTER INTERPRETATION</div>
                 <div class="text-caption bg-gray-50 rounded-lg p-3 mono leading-relaxed">
                     @php
-                        $displayLabel = $label;
-                        if ($displayLabel == 1) {
+                        // Label cluster di database adalah 1,2,3,4
+                        if ($label == 1) {
                             echo '<span class="text-emerald-600">● SHIFT LEADERS (A)</span><br>';
                             echo 'Senior (PG), High Level & Salary';
-                        } elseif ($displayLabel == 2) {
+                        } elseif ($label == 2) {
                             echo '<span class="text-sky">● EXECUTORS (B)</span><br>';
                             echo 'Junior (UG), Lower Level & Salary';
-                        } elseif ($displayLabel == 3) {
+                        } elseif ($label == 3) {
                             echo '<span class="text-purple-600">● STABILIZERS (C)</span><br>';
                             echo 'Mid-level, High Rating/Satisfied';
-                        } elseif ($displayLabel == 4) {
+                        } elseif ($label == 4) {
                             echo '<span class="text-amber-600">● WATCHLIST (D)</span><br>';
                             echo 'Lower Rating/Satisfied, Risk of Burnout';
                         } else {
@@ -245,6 +238,13 @@
                     @endphp
                 </div>
             </div>
+            
+            <a href="{{ route('manager.employees.index', ['cluster' => $label]) }}" class="btn btn-secondary btn-sm w-full mt-4">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                </svg>
+                View Employees
+            </a>
         </div>
         @endforeach
     </div>

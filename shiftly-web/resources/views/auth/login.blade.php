@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Masuk — Shiftly</title>
+    <title>Masuk - Shiftly</title>
     <meta name="description" content="Masuk ke Shiftly untuk mengakses platform penjadwalan staf medis berbasis AI.">
 
     <!-- Fonts -->
@@ -367,7 +367,7 @@
                             required
                             autofocus
                             autocomplete="email"
-                            placeholder="nama@rumahsakit.com"
+                            placeholder="nama@shiftly.com"
                         >
                         <span class="material-symbols-outlined input-icon">mail</span>
                     </div>

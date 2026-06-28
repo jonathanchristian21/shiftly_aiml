@@ -30,9 +30,11 @@
             <input type="number" name="required_senior" value="{{ old('required_senior', $shiftRequirement->required_senior) }}" required min="0" class="w-full text-body">
         </div>
 
-        <div class="mb-4 flex items-center">
-            <input type="checkbox" name="is_active" value="1" {{ old('is_active', $shiftRequirement->is_active) ? 'checked' : '' }} class="mr-2">
-            <label class="text-sm font-medium text-gray-700">Active</label>
+        <div class="mb-4">
+            <label class="flex items-center gap-2">
+                <input type="checkbox" name="is_active" value="1" {{ old('is_active', $shiftRequirement->is_active) ? 'checked' : '' }} class="w-4 h-4">
+                <span class="text-body font-medium">Active</span>
+            </label>
         </div>
 
         <div class="flex justify-end space-x-3">

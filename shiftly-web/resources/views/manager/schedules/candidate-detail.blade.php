@@ -29,7 +29,7 @@
 
 <div class="card p-6 mb-6">
     <h2 class="text-title mb-4">Metrics</h2>
-    <div class="grid grid-cols-2 md:grid-cols-3 gap-4 text-caption">
+    <div class="grid grid-cols-2 md:grid-cols-2 gap-4 text-caption">
         <div>
             <div class="text-gray-500 mb-1">ASSIGNMENTS</div>
             <div class="font-mono font-semibold">{{ $enrichedCandidate['summary']['total_assignments'] }}</div>
@@ -41,12 +41,6 @@
                 <span class="badge badge-warning">S:{{ $enrichedCandidate['summary']['soft_violation_count'] }}</span>
             </div>
         </div>
-        @if(isset($enrichedCandidate['summary']['cluster_balance']))
-        <div>
-            <div class="text-gray-500 mb-1">CLUSTER BALANCE</div>
-            <div class="font-mono font-semibold">{{ number_format($enrichedCandidate['summary']['cluster_balance'], 2) }}</div>
-        </div>
-        @endif
     </div>
 </div>
 
@@ -94,13 +88,13 @@
 </div>
 
 <div class="mt-6 flex justify-between">
-    <a href="{{ route('manager.schedules.compare') }}" class="btn btn-secondary">
+    <a href="{{ route('manager.schedules.compare', $schedule) }}" class="btn btn-secondary">
         <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
         </svg>
         <span>BACK TO COMPARE</span>
     </a>
-    <form method="POST" action="{{ route('manager.schedules.publish') }}" class="inline" onsubmit="return confirm('Publish this schedule?')">
+    <form method="POST" action="{{ route('manager.schedules.publish', $schedule) }}" class="inline" onsubmit="return confirm('Publish this schedule?')">
         @csrf
         <input type="hidden" name="candidate_id" value="{{ $enrichedCandidate['candidate_id'] }}">
         <button type="submit" class="btn btn-success">

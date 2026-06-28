@@ -37,7 +37,7 @@ class EmployeeController extends Controller
             $query->where('cluster_label', $request->cluster);
         }
 
-        $employees = $query->latest()->paginate(20);
+        $employees = $query->latest()->get();
         $departments = Department::where('is_active', true)->get();
 
         return view('manager.employees.index', compact('employees', 'departments'));

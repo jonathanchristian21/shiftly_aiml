@@ -25,7 +25,7 @@ return new class extends Migration
             $table->string('recruitment_type')->nullable();
             $table->unsignedTinyInteger('job_level');
             $table->unsignedTinyInteger('rating');
-            $table->boolean('onsite')->default(false);
+            $table->unsignedTinyInteger('onsite')->default(0);
             $table->unsignedSmallInteger('awards')->default(0);
             $table->unsignedSmallInteger('certifications')->default(0);
             $table->decimal('salary', 12, 2);

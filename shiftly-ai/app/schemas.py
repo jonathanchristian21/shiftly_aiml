@@ -146,7 +146,21 @@ class EvaluateCandidatesRequest(BaseModel):
 
 class EvaluatedCandidate(ScheduleCandidate):
     rf_profit_score: float
+    predicted_salary: float   # dipakai sebagai final_score (GA 50% + RF 50%)
+    final_score: float = 0.0  # final_score eksplisit untuk ditampilkan di web
 
 
 class EvaluateCandidatesResponse(BaseModel):
+    candidates: list[EvaluatedCandidate]
+
+
+class GenerateAndEvaluateResponse(BaseModel):
+    """Response dari endpoint /generate-and-evaluate.
+    
+    Berisi kandidat jadwal yang sudah dievaluasi oleh model Random Forest.
+    Kandidat diurutkan dari rf_profit_score tertinggi (terbaik).
+    
+    Berbeda dengan GenerateScheduleResponse: tiap kandidat sudah memiliki
+    rf_profit_score yang dihitung dari prediksi model RF terlatih.
+    """
     candidates: list[EvaluatedCandidate]

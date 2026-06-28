@@ -13,7 +13,7 @@ class ShiftRequirementController extends Controller
         $requirements = DepartmentShiftRequirement::with('department')
             ->orderBy('department_id')
             ->orderBy('shift')
-            ->paginate(20);
+            ->get();
         
         $departments = Department::where('is_active', true)
             ->withCount('employees')
@@ -39,6 +39,17 @@ class ShiftRequirementController extends Controller
             'required_senior' => 'required|integer|min:0',
         ]);
 
+        // Check if combination already exists
+        $exists = DepartmentShiftRequirement::where('department_id', $validated['department_id'])
+            ->where('shift', $validated['shift'])
+            ->exists();
+
+        if ($exists) {
+            return redirect()->back()
+                ->withInput()
+                ->withErrors(['shift' => 'This department already has a requirement for this shift. Please edit the existing one instead.']);
+        }
+
         $validated['is_active'] = true;
 
         DepartmentShiftRequirement::create($validated);
@@ -60,8 +71,9 @@ class ShiftRequirementController extends Controller
         $validated = $request->validate([
             'required_staff' => 'required|integer|min:0',
             'required_senior' => 'required|integer|min:0',
-            'is_active' => 'boolean',
         ]);
+
+        $validated['is_active'] = $request->has('is_active');
 
         $shiftRequirement->update($validated);
 
@@ -69,12 +81,67 @@ class ShiftRequirementController extends Controller
             ->with('success', 'Shift requirement updated successfully.');
     }
 
-    public function destroy(DepartmentShiftRequirement $shiftRequirement)
+    public function destroy(Request $request, DepartmentShiftRequirement $shiftRequirement = null)
     {
-        $shiftRequirement->delete();
+        // Bulk delete
+        if ($request->has('ids')) {
+            $ids = $request->input('ids', []);
+            $count = DepartmentShiftRequirement::whereIn('id', $ids)->delete();
+            return redirect()->route('manager.shift-requirements.index')
+                ->with('success', "Successfully deleted {$count} shift requirements.");
+        }
+
+        // Single delete
+        if ($shiftRequirement) {
+            $shiftRequirement->delete();
+            return redirect()->route('manager.shift-requirements.index')
+                ->with('success', 'Shift requirement deleted successfully.');
+        }
 
         return redirect()->route('manager.shift-requirements.index')
-            ->with('success', 'Shift requirement deleted successfully.');
+            ->withErrors(['error' => 'No requirements selected for deletion.']);
+    }
+
+    public function activate(DepartmentShiftRequirement $shiftRequirement)
+    {
+        $shiftRequirement->update(['is_active' => true]);
+        return redirect()->route('manager.shift-requirements.index')
+            ->with('success', 'Shift requirement activated successfully.');
+    }
+
+    public function deactivate(DepartmentShiftRequirement $shiftRequirement)
+    {
+        $shiftRequirement->update(['is_active' => false]);
+        return redirect()->route('manager.shift-requirements.index')
+            ->with('success', 'Shift requirement deactivated successfully.');
+    }
+
+    public function bulkActivate(Request $request)
+    {
+        $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'exists:department_shift_requirements,id',
+        ]);
+
+        $ids = $request->input('ids', []);
+        $count = DepartmentShiftRequirement::whereIn('id', $ids)->update(['is_active' => true]);
+
+        return redirect()->route('manager.shift-requirements.index')
+            ->with('success', "Successfully activated {$count} shift requirements.");
+    }
+
+    public function bulkDeactivate(Request $request)
+    {
+        $request->validate([
+            'ids'   => 'required|array|min:1',
+            'ids.*' => 'exists:department_shift_requirements,id',
+        ]);
+
+        $ids = $request->input('ids', []);
+        $count = DepartmentShiftRequirement::whereIn('id', $ids)->update(['is_active' => false]);
+
+        return redirect()->route('manager.shift-requirements.index')
+            ->with('success', "Successfully deactivated {$count} shift requirements.");
     }
 
     public function bulkCreate(Request $request)

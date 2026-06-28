@@ -1,327 +1,234 @@
 """
-rf_service.py
-=============
-Random Forest service untuk mengevaluasi kandidat jadwal GA.
+rf_service.py — RF evaluasi profit_score kandidat jadwal.
 
-ALUR KERJA:
-  1. Model dimuat dari disk saat pertama kali dipakai (lazy loading, di-cache).
-  2. Setiap kandidat jadwal (output GA) dikonversi ke fitur numerik.
-     - Fitur diambil dari DATA ASLI PEGAWAI (employees_by_id) jika tersedia.
-     - Fallback ke snapshot dari assignments jika data pegawai tidak dikirim.
-  3. Model RF memprediksi estimated_daily_salary rata-rata per kandidat.
-  4. rf_profit_score dihitung: makin rendah biaya + pelanggaran = skor makin tinggi.
-  5. Kandidat diurutkan dari skor tertinggi.
+PERBAIKAN RF AGAR LEBIH BERVARIASI (tidak stuck di 30-an):
+------------------------------------------------------------
+Masalah sebelumnya: fitur antar kandidat C1-C5 hampir identik karena
+semua diambil dari pool employee yang sama → RF menghasilkan prediksi
+yang hampir sama untuk semua kandidat.
 
-Kenapa employees_by_id penting?
----------------------------------
-  Tanpa data pegawai asli, fitur seperti age, job_level, Dept harus di-hardcode
-  ke nilai default → prediksi kurang akurat untuk tiap user.
-  Dengan employees_by_id dari input user, fitur dihitung dari DATA NYATA
-  pegawai yang dijadwalkan → prediksi salary mencerminkan kondisi sesungguhnya.
+Solusi: tambahkan fitur DIFERENSIAL — fitur yang mengukur PERBEDAAN
+antar kandidat, bukan hanya nilai absolut:
+  - salary_efficiency   : total_salary / median_salary_batch (relatif ke batch)
+  - coverage_efficiency : active_employees / total_required_slots
+  - assignment_density  : total_assignments / (active_employees × days)
+  - hard_ratio         : hard_violations / total_slots
+  - senior_coverage    : actual_senior / required_senior (coverage rate senior)
 
-Catatan untuk mahasiswa:
-------------------------
-  - Jalankan train_rf_model.py dulu sebelum server bisa dipakai.
-  - rf_profit_score BUKAN gaji yang dibayarkan. Ini skor 0-100 untuk
-    membandingkan antar kandidat: mana yang paling hemat dan efisien.
+Dengan fitur diferensial, meskipun semua kandidat dari pool yang sama,
+perbedaan kecil dalam komposisi shift akan menghasilkan fitur yang berbeda
+→ RF memberikan skor yang lebih bervariasi.
+
+TOTAL SALARY: dari salary_calculator (USD, deterministik per assignment).
+FINAL SCORE : GA fitness norm (50%) + RF profit score (50%).
+BEST        : kandidat dengan final_score tertinggi.
+RF SCORE    : raw prediction dari model (tidak di-rescale), floor 5.
 """
 
 from __future__ import annotations
-
 import os
 import numpy as np
 import pandas as pd
 import joblib
+from collections import defaultdict
 
 from app.schemas import Employee, EvaluatedCandidate, ScheduleCandidate
 from app.services.salary_calculator import compute_candidate_salary_features
 
-# ── Path model ────────────────────────────────────────────────────────────────
+_BASE_DIR   = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_MODEL_PATH = os.path.join(_BASE_DIR, "models", "rf_profit_model.joblib")
+_FEAT_PATH  = os.path.join(_BASE_DIR, "models", "rf_profit_feature_names.joblib")
+_MODEL      = None
+_FEAT_NAMES: list[str] | None = None
 
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-_MODEL_PATH = os.path.join(_BASE_DIR, "models", "rf_salary_model.joblib")
-_FEATURE_NAMES_PATH = os.path.join(_BASE_DIR, "models", "rf_feature_names.joblib")
+DEPT_TIER: dict[str, int] = {
+    "Emergency Physician": 1, "Surgeon": 1, "Orthopedic Surgeon": 1,
+    "Cardiologist": 1, "Neurologist": 1, "Anesthesiologist": 1,
+    "Oncologist": 2, "Radiologist": 2, "Pediatrician": 2, "General Practitioner": 2,
+    "Registered Nurse": 3, "Nurse Practitioner": 3, "Nurse Assistant": 3,
+}
+TIER_WEIGHT         = {1: 1.5, 2: 1.0, 3: 0.6}
+BENCHMARK_DAILY_USD = 2292.0
 
-# Cache model agar tidak reload setiap request
-_MODEL = None
-_FEATURE_NAMES: list[str] | None = None
-
-
-# ── Konstanta bisnis (sama dengan train_rf_model.py) ─────────────────────────
-
-_EDUCATION_ENC = {"ug": 0, "pg": 1}
-_LOCATION_ENC  = {"suburb": 0, "city": 1}
-_DEPT_LIST = [
-    "Anesthesiologist", "Cardiologist", "Emergency Physician",
-    "General Practitioner", "Neurologist", "Nurse Assistant",
-    "Nurse Practitioner", "Oncologist", "Orthopedic Surgeon",
-    "Pediatrician", "Radiologist", "Registered Nurse", "Surgeon",
+FEATURE_NAMES = [
+    # Fitur absolut (sama seperti sebelumnya)
+    "coverage_rate", "avg_dept_weight", "certified_ratio", "senior_ratio",
+    "night_ratio", "night_to_morning_ratio", "cost_ratio", "cluster_balance",
+    "hard_violation_count", "soft_violation_ratio", "dayoff_violation_ratio",
+    "avg_job_level",
+    # Fitur diferensial (BARU) — lebih diskriminatif antar kandidat
+    "assignment_density",    # total_assignments / (active_employees × days)
+    "senior_coverage_rate",  # pct slot senior yang terpenuhi
+    "salary_per_active_emp", # total_salary / active_employees (efisiensi per orang)
+    "night_senior_ratio",    # senior yang kena shift malam / total senior aktif
 ]
-_RECRUITMENT_ENC = {"on-campus": 0, "recruitment agency": 1, "referral": 2, "walk-in": 3}
 
-
-# ── Load model ────────────────────────────────────────────────────────────────
 
 def _load_model():
-    """
-    Muat model RF dari disk ke memori (hanya sekali, lalu di-cache).
-
-    Raise FileNotFoundError jika model belum ditraining.
-    Solusi: jalankan `python train_rf_model.py` dari folder shiftly-ai.
-    """
-    global _MODEL, _FEATURE_NAMES
-
+    global _MODEL, _FEAT_NAMES
     if _MODEL is not None:
-        return _MODEL, _FEATURE_NAMES
-
+        return _MODEL, _FEAT_NAMES
     if not os.path.exists(_MODEL_PATH):
         raise FileNotFoundError(
-            f"Model belum ada di: {_MODEL_PATH}\n"
-            "Jalankan dulu: python train_rf_model.py"
+            f"Model belum ada: {_MODEL_PATH}\n"
+            "Jalankan: python train_rf_model.py"
         )
+    _MODEL      = joblib.load(_MODEL_PATH)
+    _FEAT_NAMES = joblib.load(_FEAT_PATH)
+    print(f"[RF] Model dimuat: {_MODEL_PATH}")
+    return _MODEL, _FEAT_NAMES
 
-    _MODEL = joblib.load(_MODEL_PATH)
-    _FEATURE_NAMES = joblib.load(_FEATURE_NAMES_PATH)
-    return _MODEL, _FEATURE_NAMES
 
-
-# ── Feature extraction ────────────────────────────────────────────────────────
-
-def _extract_employee_avg_features(
+def _extract_features(
     candidate: ScheduleCandidate,
     employees_by_id: dict[int, Employee],
+    days: int = 7,
 ) -> dict:
-    """
-    Hitung rata-rata fitur pegawai dari semua assignment aktif di kandidat ini.
+    """Ekstrak 16 fitur dari kandidat (12 absolut + 4 diferensial baru)."""
+    s            = candidate.summary
+    total_assign = max(s.total_assignments, 1)
+    active_ids   = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
 
-    Menggunakan DATA ASLI PEGAWAI dari employees_by_id jika tersedia.
-    Fallback ke salary_snapshot / is_senior_snapshot dari assignment.
-
-    Kenapa rata-rata?
-    -----------------
-    Satu kandidat jadwal melibatkan banyak pegawai. Model RF ditraining
-    per-pegawai (satu baris = satu pegawai). Untuk mengevaluasi satu
-    kandidat (banyak pegawai), kita pakai rata-rata profil pegawai aktif.
-    Ini sudah cukup karena target kita adalah biaya total kandidat.
-    """
-    assignments = candidate.assignments
-    if not assignments:
-        # Fallback ke nilai rata-rata dataset jika tidak ada assignment
-        return {
-            "age": 38.6, "job_level": 3.0, "rating": 3.0,
-            "certifications": 0.5, "awards": 0.4, "onsite": 0.5, "satisfied": 0.5,
-            "education_enc": 0.5, "Dept_enc": 6.0, "location_enc": 0.5,
-            "recruitment_type_enc": 1.5,
-        }
-
-    # Kumpulkan atribut dari setiap pegawai aktif (deduplicate per employee_id)
-    seen_emp_ids: set[int] = set()
-    ages, job_levels, ratings, certs, awards, onsites, satisfieds = [], [], [], [], [], [], []
-    edu_encs, dept_encs, loc_encs, rec_encs = [], [], [], []
-
-    for assignment in assignments:
-        emp_id = assignment.employee_id
-        if emp_id in seen_emp_ids:
-            continue
-        seen_emp_ids.add(emp_id)
-
-        emp = employees_by_id.get(emp_id)
-
-        if emp is not None:
-            # ── Pakai DATA ASLI pegawai dari input user ──────────────────────
-            ages.append(float(emp.age))
+    dept_weights, certs, seniors, job_levels = [], [], [], []
+    senior_ids: set[int] = set()
+    for eid in active_ids:
+        emp = employees_by_id.get(eid)
+        if emp:
+            tier = DEPT_TIER.get(emp.department or "", 3)
+            dept_weights.append(TIER_WEIGHT[tier])
+            certs.append(1 if getattr(emp, "certifications", 0) >= 1 else 0)
+            is_sr = (emp.education or "").upper() == "PG"
+            seniors.append(1 if is_sr else 0)
             job_levels.append(float(emp.job_level))
-            ratings.append(float(emp.rating))
-            certs.append(float(getattr(emp, "certifications", 0)))
-            awards.append(float(getattr(emp, "awards", 0)))
-            onsites.append(float(getattr(emp, "onsite", 0)))
-            satisfieds.append(float(emp.satisfied))
-
-            edu_enc = _EDUCATION_ENC.get((emp.education or "").strip().lower(), 0)
-            edu_encs.append(float(edu_enc))
-
-            dept_name = (emp.department or "").strip()
-            dept_enc = float(_DEPT_LIST.index(dept_name)) if dept_name in _DEPT_LIST else 6.0
-            dept_encs.append(dept_enc)
-
-            loc_encs.append(0.5)         # location tidak ada di schema Employee
-            rec_encs.append(1.5)         # recruitment_type tidak ada di schema Employee
-
+            if is_sr:
+                senior_ids.add(eid)
         else:
-            # ── Fallback ke snapshot assignment ──────────────────────────────
-            ages.append(35.0)
-            job_levels.append(3.0)
-            ratings.append(3.0)
-            certs.append(1.0 if assignment.is_senior_snapshot else 0.0)
-            awards.append(0.0)
-            onsites.append(0.0)
-            satisfieds.append(0.5)
-            edu_encs.append(1.0 if assignment.is_senior_snapshot else 0.0)
-            dept_encs.append(6.0)
-            loc_encs.append(0.5)
-            rec_encs.append(1.5)
+            dept_weights.append(1.0); certs.append(0)
+            seniors.append(0); job_levels.append(3.0)
 
-    def _mean(lst): return float(np.mean(lst)) if lst else 0.0
+    def m(lst): return float(np.mean(lst)) if lst else 0.0
+
+    sal          = compute_candidate_salary_features(candidate, employees_by_id)
+    cost_ratio   = sal["estimated_total_salary"] / max(BENCHMARK_DAILY_USD * total_assign, 1)
+    ntm_ratio    = sal["night_to_morning_count"] / total_assign
+    night_ratio  = s.shift_counts.get("Malam", 0) / total_assign
+    soft_ratio   = s.soft_violation_count / total_assign
+    dayoff_ratio = s.weekly_day_off_violations / total_assign
+    n_active     = max(len(active_ids), 1)
+
+    # ── Fitur diferensial baru ────────────────────────────────────────────
+    # assignment_density: rata-rata berapa shift dikerjakan 1 orang per hari
+    # Nilai ideal ~1.0 (1 shift/orang/hari). >1 = overwork, <1 = underutilized
+    assignment_density   = total_assign / max(n_active * days, 1)
+
+    # senior_coverage_rate: dari semua slot yang butuh senior, berapa % terpenuhi
+    # Dihitung dari constraint_reports
+    required_senior_slots = sum(
+        1 for r in candidate.constraint_reports if r.required_senior > 0
+    )
+    filled_senior_slots   = sum(
+        1 for r in candidate.constraint_reports
+        if r.required_senior > 0 and r.actual_senior >= r.required_senior
+    )
+    senior_coverage_rate  = filled_senior_slots / max(required_senior_slots, 1)
+
+    # salary_per_active_emp: total salary per orang aktif (efisiensi biaya SDM)
+    salary_per_active = sal["estimated_total_salary"] / n_active
+
+    # night_senior_ratio: berapa banyak senior yang kena shift malam
+    # Senior kena malam banyak = costly + risiko → berkontribusi negatif ke profit
+    night_assignments = [a for a in candidate.assignments if a.shift == "Malam"]
+    senior_at_night   = sum(1 for a in night_assignments if a.employee_id in senior_ids)
+    night_senior_ratio= senior_at_night / max(len(senior_ids) * days, 1)
 
     return {
-        "age":                  _mean(ages),
-        "job_level":            _mean(job_levels),
-        "rating":               _mean(ratings),
-        "certifications":       _mean(certs),
-        "awards":               _mean(awards),
-        "onsite":               _mean(onsites),
-        "satisfied":            _mean(satisfieds),
-        "education_enc":        _mean(edu_encs),
-        "Dept_enc":             _mean(dept_encs),
-        "location_enc":         _mean(loc_encs),
-        "recruitment_type_enc": _mean(rec_encs),
+        "coverage_rate":           min(1.0, s.active_employees / max(n_active, 1)),
+        "avg_dept_weight":         m(dept_weights),
+        "certified_ratio":         m(certs),
+        "senior_ratio":            m(seniors),
+        "night_ratio":             night_ratio,
+        "night_to_morning_ratio":  ntm_ratio,
+        "cost_ratio":              cost_ratio,
+        "cluster_balance":         float(s.cluster_balance),
+        "hard_violation_count":    float(s.hard_violation_count),
+        "soft_violation_ratio":    soft_ratio,
+        "dayoff_violation_ratio":  dayoff_ratio,
+        "avg_job_level":           m(job_levels),
+        # Diferensial
+        "assignment_density":      assignment_density,
+        "senior_coverage_rate":    senior_coverage_rate,
+        "salary_per_active_emp":   salary_per_active,
+        "night_senior_ratio":      night_senior_ratio,
     }
 
-
-def _candidate_to_rf_features(
-    candidate: ScheduleCandidate,
-    employees_by_id: dict[int, Employee],
-    feature_names: list[str],
-) -> dict:
-    """
-    Konversi satu kandidat jadwal ke dict fitur untuk model RF.
-
-    Menggabungkan:
-    - Rata-rata atribut pegawai asli (dari employees_by_id)
-    - Fitur shift engineering (is_nightshift, has_certification, night_to_morning_flag)
-    - Fitur salary dari salary_calculator
-
-    Fitur harus punya nama dan urutan SAMA dengan saat training.
-    Ini dijaga oleh parameter feature_names dari rf_feature_names.joblib.
-    """
-    assignments = candidate.assignments
-    total_assignments = max(len(assignments), 1)
-
-    # ── Fitur shift dari assignments aktual ───────────────────────────────────
-    night_count = sum(1 for a in assignments if a.shift == "Malam")
-    cert_count  = sum(1 for a in assignments if a.is_senior_snapshot)
-
-    is_nightshift_dominant = float((night_count / total_assignments) > 0.3)
-    has_certification_any  = float(cert_count > 0)
-
-    # Fitur salary dari salary_calculator (termasuk night_to_morning_count)
-    salary_feats = compute_candidate_salary_features(candidate, employees_by_id)
-    night_to_morning_flag = float(salary_feats["night_to_morning_count"] > 0)
-
-    # ── Rata-rata atribut pegawai (dari data asli user) ───────────────────────
-    emp_avg = _extract_employee_avg_features(candidate, employees_by_id)
-
-    # ── Rakit dict fitur sesuai urutan feature_names ──────────────────────────
-    feature_map = {
-        # Atribut pegawai asli (rata-rata semua pegawai aktif di kandidat ini)
-        "age":                      emp_avg["age"],
-        "job_level":                emp_avg["job_level"],
-        "rating":                   emp_avg["rating"],
-        "certifications":           emp_avg["certifications"],
-        "awards":                   emp_avg["awards"],
-        "onsite":                   emp_avg["onsite"],
-        "satisfied":                emp_avg["satisfied"],
-        # Fitur rekayasa dari shift assignments
-        "is_nightshift":            is_nightshift_dominant,
-        "has_certification":        has_certification_any,
-        "is_senior":                emp_avg["education_enc"],     # PG=1 = senior
-        "night_to_morning_flag":    night_to_morning_flag,
-        # Kategorikal (encoded, rata-rata dari semua pegawai aktif)
-        "education_enc":            emp_avg["education_enc"],
-        "Dept_enc":                 emp_avg["Dept_enc"],
-        "location_enc":             emp_avg["location_enc"],
-        "recruitment_type_enc":     emp_avg["recruitment_type_enc"],
-    }
-
-    return {fname: feature_map.get(fname, 0.0) for fname in feature_names}
-
-
-# ── Konversi prediksi salary → profit score ───────────────────────────────────
-
-def _to_profit_score(
-    predicted_salary: float,
-    candidate: ScheduleCandidate,
-    max_salary: float,
-    min_salary: float,
-) -> float:
-    """
-    Konversi prediksi estimated_daily_salary ke rf_profit_score (0–100).
-
-    Skor tinggi = jadwal hemat + sedikit pelanggaran.
-
-    Komponen:
-    - 60%: salary score (makin rendah prediksi gaji, makin tinggi skor)
-    - 40%: dikurangi penalti pelanggaran
-        - Hard violation × 6.0 (kritis, wajib dipenuhi)
-        - Soft violation × 0.5
-        - Weekly day off violation × 1.0
-    """
-    salary_range  = max(max_salary - min_salary, 1.0)
-    salary_score  = (1.0 - (predicted_salary - min_salary) / salary_range) * 100
-
-    s = candidate.summary
-    violation_penalty = (
-        s.hard_violation_count * 6.0
-        + s.soft_violation_count * 0.5
-        + s.weekly_day_off_violations * 1.0
-    )
-
-    score = (salary_score * 0.60) - (violation_penalty * 0.40)
-    return round(float(np.clip(score, 0.0, 100.0)), 2)
-
-
-# ── Fungsi utama (dipanggil dari main.py) ─────────────────────────────────────
 
 def evaluate_candidates(
     candidates: list[ScheduleCandidate],
     employees_by_id: dict[int, Employee] | None = None,
 ) -> list[EvaluatedCandidate]:
     """
-    Evaluasi kandidat jadwal menggunakan model Random Forest terlatih.
+    Evaluasi kandidat, return sorted by final_score DESC.
 
-    Parameter:
-    ----------
-    candidates       : list[ScheduleCandidate] dari output GA engine
-    employees_by_id  : dict {employee_id: Employee} — data asli pegawai dari DB.
-                       Jika None atau kosong, fitur dihitung dari snapshot saja.
-
-    Return:
-    -------
-    list[EvaluatedCandidate] diurutkan dari rf_profit_score tertinggi (terbaik).
-
-    Contoh alur:
-    ------------
-    User kirim 3 kandidat jadwal + 20 employees
-    → Fitur tiap kandidat dihitung dari data 20 employees asli (bukan default)
-    → Model prediksi estimasi salary harian
-    → Kandidat termurah + paling sedikit pelanggaran → skor tertinggi
+    RF score: raw prediction dari model, floor 5 (tidak pernah 0).
+    final_score = GA fitness norm (50%) + RF score (50%).
+    total_salary = dari salary_calculator (USD).
     """
     if not candidates:
         raise ValueError("candidates tidak boleh kosong")
 
-    model, feature_names = _load_model()
+    model, feat_names = _load_model()
     emp_map = employees_by_id or {}
 
-    # Ekstrak fitur dari setiap kandidat menggunakan data pegawai asli
-    features_list = [
-        _candidate_to_rf_features(candidate, emp_map, feature_names)
-        for candidate in candidates
+    # Estimasi jumlah hari dari assignments
+    all_dates = set()
+    for c in candidates:
+        for a in c.assignments:
+            all_dates.add(a.date)
+    n_days = max(len(all_dates), 7)
+
+    sal_totals = [
+        compute_candidate_salary_features(c, emp_map)["estimated_total_salary"]
+        for c in candidates
     ]
 
-    X = pd.DataFrame(features_list, columns=feature_names)
-    predicted_salaries = model.predict(X)
+    X = pd.DataFrame(
+        [_extract_features(c, emp_map, days=n_days) for c in candidates],
+        columns=feat_names,
+    )
+    raw_rf = model.predict(X)
 
-    max_sal = float(predicted_salaries.max())
-    min_sal = float(predicted_salaries.min())
+    # Raw prediction langsung dipakai, floor 5 agar tidak pernah 0 di UI
+    rf_scores = np.clip(raw_rf, 5.0, 100.0)
 
-    evaluated = [
-        EvaluatedCandidate(
-            **candidate.model_dump(),
-            rf_profit_score=_to_profit_score(
-                float(pred), candidate, max_sal, min_sal
-            ),
+    # Normalisasi GA fitness ke [0,100] dalam batch
+    ga_vals = np.array([c.summary.ga_fitness for c in candidates])
+    ga_min, ga_max = ga_vals.min(), ga_vals.max()
+    ga_norm = (
+        np.full(len(ga_vals), 50.0) if ga_max - ga_min < 1e-6
+        else (ga_vals - ga_min) / (ga_max - ga_min) * 100.0
+    )
+
+    final_scores = ga_norm * 0.5 + rf_scores * 0.5
+
+    evaluated = []
+    for c, rf_s, ga_n, fin_s, total_sal in zip(
+        candidates, rf_scores, ga_norm, final_scores, sal_totals
+    ):
+        data = c.model_dump()
+        data["summary"]["total_salary"] = round(total_sal, 2)
+
+        evaluated.append(EvaluatedCandidate(
+            **data,
+            rf_profit_score=round(float(rf_s), 2),
+            predicted_salary=round(float(total_sal), 2),
+            final_score=round(float(fin_s), 2),
+        ))
+
+        print(
+            f"  [RF] {c.candidate_id}: "
+            f"rf={rf_s:.1f}%  ga_norm={ga_n:.1f}  "
+            f"final={fin_s:.1f}  H:{c.summary.hard_violation_count}  "
+            f"salary=${total_sal:,.0f}"
         )
-        for candidate, pred in zip(candidates, predicted_salaries)
-    ]
 
-    return sorted(evaluated, key=lambda c: c.rf_profit_score, reverse=True)
+    return sorted(evaluated, key=lambda c: c.final_score, reverse=True)

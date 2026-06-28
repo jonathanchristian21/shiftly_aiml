@@ -37,7 +37,7 @@
         .mono { font-family: 'JetBrains Mono', 'Courier New', monospace; }
         
         /* ═══════════════════════════════════════════
-           MANAGER SIDEBAR — Dark Navy / Command Center
+           MANAGER SIDEBAR - Dark Navy / Command Center
         ═══════════════════════════════════════════ */
         .sidebar-manager {
             background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
@@ -146,7 +146,8 @@
         /* Tables */
         .table-minimal { width: 100%; border-collapse: collapse; }
         .table-minimal thead { background: #F9FAFB; position: sticky; top: 0; z-index: 10; }
-        .table-minimal thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; padding: 12px 16px; text-align: left; border-bottom: 1px solid #E5E7EB; }
+        .table-minimal thead th { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; padding: 12px 16px; text-align: left; border-bottom: 1px solid #E5E7EB; cursor: pointer; user-select: none; transition: background 0.2s; }
+        .table-minimal thead th:hover { background-color: #F3F4F6; }
         .table-minimal tbody td { font-size: 13px; padding: 12px 16px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
         .table-minimal tbody tr { transition: background 0.15s ease; }
         .table-minimal tbody tr:hover { background: #F8FAFF; }
@@ -314,6 +315,33 @@
     <script>
         $(document).ready(function() {
             $('.fade-in').css('opacity', 0).animate({ opacity: 1 }, 300);
+
+            // Generic Table Sorting
+            $('.table-minimal th').click(function() {
+                var table = $(this).parents('table').eq(0);
+                var rows = table.find('tbody tr').toArray().sort(comparer($(this).index()));
+                this.asc = !this.asc;
+                if (!this.asc) { rows = rows.reverse(); }
+                for (var i = 0; i < rows.length; i++) { table.find('tbody').append(rows[i]); }
+                
+                // Update sorting indicator visually (optional)
+                $('.table-minimal th').find('.sort-icon').remove();
+                $(this).append('<span class="sort-icon ml-1 text-sky">' + (this.asc ? ' ↑' : ' ↓') + '</span>');
+            });
+
+            function comparer(index) {
+                return function(a, b) {
+                    var valA = getCellValue(a, index), valB = getCellValue(b, index);
+                    // Menghilangkan simbol $ atau koma agar angka bisa disort secara numerik
+                    valA = valA.replace(/[^0-9.-]+/g, "") || valA;
+                    valB = valB.replace(/[^0-9.-]+/g, "") || valB;
+                    
+                    return $.isNumeric(valA) && $.isNumeric(valB) ? valA - valB : valA.toString().localeCompare(valB);
+                }
+            }
+            function getCellValue(row, index) {
+                return $(row).children('td').eq(index).text().trim() || $(row).children('td').eq(index).find('input').val() || '';
+            }
         });
     </script>
 </body>

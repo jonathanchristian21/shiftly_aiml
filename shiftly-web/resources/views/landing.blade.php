@@ -1387,7 +1387,7 @@
 
         /* ── MOBILE MENU ── */
         function toggleMobileMenu() {
-            // Simple scroll to top or toggle — extend as needed
+            // Simple scroll to top or toggle - extend as needed
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     </script>
