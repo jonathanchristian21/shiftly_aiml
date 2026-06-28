@@ -130,48 +130,61 @@ def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -
     """
     Hitung profit_score (0-100) per kandidat jadwal.
 
-    Formula dikalibrasi dari range AKTUAL komponen di data GA nyata:
-      cluster_balance : 0.65 - 0.95
-      avg_dept_weight : 0.99 - 1.11  (Tier 1=1.5, Tier2=1.0, Tier3=0.6, rata2 ~1.05)
-      cost_ratio      : 0.70 - 1.03
-      soft_ratio      : 0.14 - 0.20
-      dayoff_ratio    : 0.29 - 0.47
-      hard_violation  : 0 - 11
-      ntm_ratio       : 0.00 - 0.02
+    RECALIBRATION (v2): formula sebelumnya terlalu bergantung pada cluster_balance
+    dan dept_weight yang range-nya sempit di data aktual → score stuck 27-31.
 
-    KOMPONEN:
-    ---------
-    base (30): semua jadwal valid dapat base score — hindari score 0 untuk
-               kondisi normal karena semua kandidat pasti punya soft violation.
+    Kalibrasi baru berdasarkan range AKTUAL kondisi GA dengan fitness terpisah:
+      cluster_balance : 0.30 - 0.95  (lebih lebar, karena GA tanpa cluster reward)
+      coverage_ratio  : 0.70 - 1.00  (seberapa baik slot terpenuhi)
+      cost_ratio      : 0.50 - 1.20  (biaya vs benchmark)
+      soft_ratio      : 0.10 - 0.30
+      dayoff_ratio    : 0.20 - 0.55
+      hard_violation  : 0 - 100+
 
-    cluster_reward (0-35): cluster_balance tinggi = distribusi shift merata
-                           = lebih efisien & fair → komponen terpenting profitabilitas.
+    KOMPONEN BARU:
+    --------------
+    coverage_reward (0-40): KOMPONEN TERBESAR — seberapa baik semua shift terpenuhi.
+                            Hard constraint terpenuhi = layanan medis berjalan = revenue.
+                            Formula: ((coverage - 0.70) / 0.30) × 40
+                            coverage 1.0 (sempurna) → +40, coverage 0.70 → 0.
 
-    dept_weight_reward (0-15): dept tier tinggi (spesialis) = nilai layanan lebih tinggi
-                               = revenue potensial lebih besar.
+    cluster_reward (0-25): distribusi cluster merata = tim lebih efektif.
+                           Dikalibrasi ulang: baseline 0.30 (bukan 0.65).
+                           Formula: ((cluster - 0.30) / 0.65) × 25
 
-    cost_penalty (0-15): cost_ratio tinggi = biaya di atas benchmark → profit turun.
-                         Dinormalisasi ke range aktual (0.70-1.03).
+    hard_penalty (×8): setiap hard violation langsung potong 8 poin.
+                       Lebih tinggi dari sebelumnya (×5) karena H-vio = revenue hilang.
 
-    hard_penalty (×5): setiap hard violation = layanan tidak terpenuhi → revenue hilang.
+    cost_penalty (0-15): cost_ratio di atas 1.0 (di atas benchmark) → profit turun.
 
-    soft_penalty (0-8): dinormalisasi ke range aktual (0.14-0.20) agar perbedaan
-                        antar kandidat tetap terlihat meski semua punya soft violation.
+    soft_penalty (0-10): soft violation mempengaruhi ergonomi dan kelelahan staf.
 
-    dayoff_penalty (0-7): dinormalisasi ke range aktual (0.29-0.47).
+    dayoff_penalty (0-8): kekurangan libur → risiko burnout → produktivitas turun.
 
-    ntm_penalty (0-3): malam→pagi = kelelahan → risiko kesalahan medis.
+    ntm_penalty (0-5): malam→pagi = kelelahan akut → risiko medis.
 
-    TARGET RANGE (dikalibrasi dari data aktual):
-      Ideal  (hard=0, cluster≥0.90, cost rendah)    → 70-85
-      Bagus  (hard=0, cluster≥0.80, cost sedang)    → 50-65
-      Sedang (hard=0, cluster≥0.75, cost tinggi)    → 30-50
-      Rendah (hard=0, cluster rendah, semua buruk)  → 10-25
-      Ada hard violation (hard≥1)                   →  0-10
+    TARGET RANGE (dikalibrasi ulang):
+      Ideal  (H:0, coverage=1.0, cluster≥0.80, cost rendah)    → 70-85
+      Bagus  (H:0, coverage≥0.90, cluster≥0.60, cost sedang)   → 50-70
+      Sedang (H:0, coverage≥0.80, cluster sedang)               → 35-50
+      Rendah (H:0, coverage rendah atau cluster sangat rendah)  → 15-35
+      Ada hard violation (H≥1)                                  →  0-15
     """
     s            = candidate.summary
     total_assign = max(s.total_assignments, 1)
     active_ids   = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
+
+    # Coverage ratio: berapa slot requirement yang benar-benar terpenuhi
+    # Estimasi dari hard_violation_count (tiap vio = 1 slot kurang)
+    # Hitung dari requirements jika tersedia
+    req_total = sum(r.get("required_staff", 0) for r in requirements) if requirements else 0
+    if req_total > 0:
+        days_est  = total_assign / max(len(active_ids), 1) / (5/7)  # estimasi hari
+        req_slots = req_total * max(1, round(days_est))
+        coverage_ratio = max(0.0, min(1.0, 1.0 - s.hard_violation_count / max(req_slots, 1)))
+    else:
+        # Fallback: pakai coverage dari summary jika ada, atau estimasi dari H-count
+        coverage_ratio = max(0.0, 1.0 - (s.hard_violation_count * 0.01))
 
     # Rata-rata dept_weight pegawai aktif
     dept_weights = []
@@ -179,7 +192,7 @@ def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -
         emp  = employees_by_id.get(eid)
         tier = DEPT_TIER.get(emp.department or "", 3) if emp else 3
         dept_weights.append(TIER_WEIGHT[tier])
-    avg_dept_weight = float(np.mean(dept_weights)) if dept_weights else 1.0
+    avg_dept_weight = float(np.mean(dept_weights)) if dept_weights else 0.6
 
     # Hitung komponen dari salary_calculator
     sal_feats    = compute_candidate_salary_features(candidate, employees_by_id)
@@ -191,19 +204,25 @@ def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -
     cluster      = float(s.cluster_balance)
 
     # ── REWARD ────────────────────────────────────────────────────────────
-    base           = 30.0
-    cluster_reward = float(np.clip(((cluster - 0.65) / 0.30) * 35, 0, 35))
-    dw_reward      = float(np.clip(((avg_dept_weight - 0.99) / 0.12) * 15, 0, 15))
+    # coverage_reward: komponen terbesar (40 poin max)
+    coverage_reward = float(np.clip(((coverage_ratio - 0.70) / 0.30) * 40, 0, 40))
+
+    # cluster_reward: dikalibrasi ulang dari baseline 0.30 (bukan 0.65)
+    cluster_reward  = float(np.clip(((cluster - 0.30) / 0.65) * 25, 0, 25))
+
+    # dept_weight reward: bonus kecil jika ada spesialis (Tier1/2)
+    dw_reward       = float(np.clip(((avg_dept_weight - 0.60) / 0.90) * 10, 0, 10))
 
     # ── PENALTY ───────────────────────────────────────────────────────────
-    cost_penalty   = float(np.clip(((cost_ratio - 0.70) / 0.33) * 15, 0, 15))
-    hard_penalty   = s.hard_violation_count * 5.0
-    soft_penalty   = float(np.clip(((soft_ratio - 0.14) / 0.06) * 8, 0, 8))
-    dayoff_penalty = float(np.clip(((dayoff_ratio - 0.28) / 0.19) * 7, 0, 7))
-    ntm_penalty    = float(np.clip((ntm_ratio / 0.02) * 3, 0, 3))
+    hard_penalty   = s.hard_violation_count * 8.0          # lebih tajam dari ×5
+    cost_penalty   = float(np.clip(((cost_ratio - 0.80) / 0.40) * 15, 0, 15))
+    soft_penalty   = float(np.clip(((soft_ratio - 0.10) / 0.20) * 10, 0, 10))
+    dayoff_penalty = float(np.clip(((dayoff_ratio - 0.20) / 0.35) * 8, 0, 8))
+    ntm_penalty    = float(np.clip((ntm_ratio / 0.03) * 5, 0, 5))
 
-    score = (base + cluster_reward + dw_reward
-             - cost_penalty - hard_penalty
+    # base = 25 (lebih rendah dari 30 sebelumnya karena reward lebih besar)
+    score = (25.0 + coverage_reward + cluster_reward + dw_reward
+             - hard_penalty - cost_penalty
              - soft_penalty - dayoff_penalty - ntm_penalty)
     return float(np.clip(score, 0.0, 100.0))
 
