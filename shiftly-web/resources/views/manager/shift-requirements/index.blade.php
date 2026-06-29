@@ -206,7 +206,7 @@
                             <div class="grid grid-cols-2 gap-4 ml-8">
                                 <div>
                                     <label class="text-tiny mb-2 block">Min Staff</label>
-                                    <input type="number" name="shifts[0][required_staff]" min="0" value="3" class="w-full">
+                                    <input type="number" name="shifts[0][required_staff]" min="0" value="6" class="w-full">
                                 </div>
                                 <div>
                                     <label class="text-tiny mb-2 block">Min Senior</label>
@@ -225,7 +225,7 @@
                             <div class="grid grid-cols-2 gap-4 ml-8">
                                 <div>
                                     <label class="text-tiny mb-2 block">Min Staff</label>
-                                    <input type="number" name="shifts[1][required_staff]" min="0" value="3" class="w-full">
+                                    <input type="number" name="shifts[1][required_staff]" min="0" value="6" class="w-full">
                                 </div>
                                 <div>
                                     <label class="text-tiny mb-2 block">Min Senior</label>
@@ -244,7 +244,7 @@
                             <div class="grid grid-cols-2 gap-4 ml-8">
                                 <div>
                                     <label class="text-tiny mb-2 block">Min Staff</label>
-                                    <input type="number" name="shifts[2][required_staff]" min="0" value="2" class="w-full">
+                                    <input type="number" name="shifts[2][required_staff]" min="0" value="4" class="w-full">
                                 </div>
                                 <div>
                                     <label class="text-tiny mb-2 block">Min Senior</label>

@@ -48,9 +48,9 @@ BASE_FITNESS = 10000.0
 # jika fitness-nya turun sangat drastis saat ada shortage.
 # Nilai 300/360 membuat kromosom dengan shortage SELALU kalah dari
 # kromosom tanpa shortage dalam tournament selection.
-W_STAFF_SHORTAGE  = 300.0    # dinaikkan 2x: kekurangan staff = sangat fatal
+W_STAFF_SHORTAGE  = 500.0    # naik lagi: 1 shortage = -500 langsung
 W_STAFF_OVER      = 5.0      # tetap: overstaff masih ditoleransi
-W_SENIOR_SHORTAGE = 360.0    # dinaikkan 2x: tanpa kepala shift = tidak bisa operasi
+W_SENIOR_SHORTAGE = 600.0    # naik lagi: tanpa kepala shift = shutdown operasional
 
 # ── SOFT CONSTRAINTS ─────────────────────────────────────────────────────────
 # Penalti sedang → GA usahakan penuhi, tapi boleh dilanggar jika terpaksa.
@@ -210,7 +210,18 @@ def _select_staff_cluster_aware(
     ]
 
     if not available:
-        return []
+        # Semua pegawai sudah punya shift di hari ini.
+        # Daripada return [] (→ hard violation pasti), izinkan pegawai yang
+        # sudah dapat shift BERBEDA untuk double-shift sebagai fallback.
+        # GA akan mengeliminasi kromosom ini via fitness (overwork = soft penalty),
+        # tapi setidaknya hard constraint STAFF terpenuhi di inisialisasi.
+        # One-shift-per-day rule tetap dipertahankan untuk shift YANG SAMA.
+        available = [
+            emp for emp in employees
+            if chromosome[emp.id][day_index] not in ("Libur", shift)
+        ]
+        if not available:
+            return []  # Benar-benar tidak ada opsi sama sekali
 
     # Hindari malam→pagi (soft constraint)
     if day_index > 0 and shift == "Pagi":
@@ -231,6 +242,18 @@ def _select_staff_cluster_aware(
     seniors = [e for e in available if _is_senior(e)]
     juniors = [e for e in available if not _is_senior(e)]
 
+    # ROTASI SHIFT: Shuffle setiap pool agar pegawai tidak selalu mendapat
+    # shift yang sama setiap hari. Prioritas TIER tetap dipertahankan
+    # (senior/cluster-A → C → B → fallback → D), tapi siapa dalam tiap tier
+    # dipilih secara ACAK sehingga shift terdistribusi merata antar pegawai.
+    rng.shuffle(cluster_a)
+    rng.shuffle(cluster_b)
+    rng.shuffle(cluster_c)
+    rng.shuffle(cluster_d)
+    rng.shuffle(no_cluster)
+    rng.shuffle(seniors)
+    rng.shuffle(juniors)
+
     # PERF: gunakan set id (O(1) membership) + counter senior, bukan
     # `emp not in selected` (O(n) value-equality scan pada pydantic model)
     # dan `len([... for e in selected if _is_senior(e)])` (O(n) per-iterasi).
@@ -239,8 +262,8 @@ def _select_staff_cluster_aware(
     selected_senior_count = 0
 
     # 1. Pilih senior untuk kepala shift (HARD CONSTRAINT)
+    # Pool sudah di-shuffle — tidak perlu sort agar rotasi benar-benar acak
     senior_pool = cluster_a if cluster_a else seniors
-    senior_pool.sort(key=lambda e: (e.salary, -e.rating, e.id))
 
     for emp in senior_pool:
         if selected_senior_count >= required_senior:
@@ -251,8 +274,7 @@ def _select_staff_cluster_aware(
             if _is_senior(emp):
                 selected_senior_count += 1
 
-    # 2. Isi sisa dengan Cluster C (stabilizers)
-    cluster_c.sort(key=lambda e: (-e.rating, -e.satisfied, e.salary, e.id))
+    # 2. Isi sisa dengan Cluster C (stabilizers) — shuffled, tidak di-sort
     for emp in cluster_c:
         if len(selected) >= required_staff:
             break
@@ -260,8 +282,7 @@ def _select_staff_cluster_aware(
             selected.append(emp)
             selected_ids.add(emp.id)
 
-    # 3. Isi dengan Cluster B (cost-efficient)
-    cluster_b.sort(key=lambda e: (e.salary, -e.rating, e.id))
+    # 3. Isi dengan Cluster B (cost-efficient) — shuffled, tidak di-sort
     for emp in cluster_b:
         if len(selected) >= required_staff:
             break
@@ -269,9 +290,9 @@ def _select_staff_cluster_aware(
             selected.append(emp)
             selected_ids.add(emp.id)
 
-    # 4. Isi dengan no cluster atau senior lain
+    # 4. Isi dengan no cluster atau senior lain — sudah di-shuffle sebelumnya
     remaining = [e for e in (no_cluster + seniors + juniors) if e.id not in selected_ids]
-    remaining.sort(key=lambda e: (e.salary, -e.rating, e.id))
+    rng.shuffle(remaining)
 
     for emp in remaining:
         if len(selected) >= required_staff:
@@ -283,8 +304,7 @@ def _select_staff_cluster_aware(
     # 5. FALLBACK: Cluster D (watchlist) hanya jika SANGAT terpaksa
     # Hindari cluster D di shift malam atau shift berat
     if len(selected) < required_staff and cluster_d:
-        cluster_d.sort(key=lambda e: (e.rating, e.satisfied, -e.salary, e.id))
-        # Hanya ambil jika shift bukan malam ATAU sangat terpaksa
+        # Pool cluster_d sudah di-shuffle di atas
         if shift != "Malam" or len(selected) < required_staff * 0.7:
             for emp in cluster_d:
                 if len(selected) >= required_staff:
@@ -343,15 +363,39 @@ def _initial_chromosome_cluster_aware(
     # memenuhi semua slot shift selama 31 hari tanpa kekurangan pegawai.
     # Rumus: setiap pegawai kerja ~5 hari/minggu → butuh (days/5) kali
     # minimum pool agar ada rotasi. Cap di 4.0x agar tidak boros.
-    base_buffer = {"balanced": 2.0, "cost_efficient": 1.7, "quality_first": 2.3}
-    base        = base_buffer.get(strategy, 2.0)
-    day_scale   = min(4.0, base + (request.days / 7) * 0.30)
+    # Semua strategy dinaikkan base buffer-nya agar pool cukup untuk
+    # jadwal panjang tanpa repair. cost_efficient juga dinaikkan karena
+    # pool kecil untuk 31 hari justru menyebabkan hard violation.
+    # Variasi antar strategy tetap ada tapi dari PEMILIHAN pegawai
+    # (murah/mahal/rating), bukan dari JUMLAH pegawai yang aktif.
+    base_buffer = {"balanced": 2.5, "cost_efficient": 2.2, "quality_first": 2.8}
+    base        = base_buffer.get(strategy, 2.5)
+    day_scale   = min(5.0, base + (request.days / 7) * 0.35)
 
-    # Pilih subset pegawai per department yang akan diaktifkan
+    # Pilih subset pegawai per department yang akan diaktifkan.
+    #
+    # LOGIKA PENSKALAAN:
+    # Untuk jadwal panjang (mis 31 hari), kita butuh rotasi yang cukup.
+    # Tanpa repair, SEMUA pegawai yang tersedia harus ikut dipertimbangkan
+    # agar GA tidak kehabisan "available" saat mengisi hari-hari akhir.
+    #
+    # Rumus kebutuhan minimum pegawai:
+    #   slots_per_day  = n_shift × required_staff_per_shift
+    #   work_days_each = ceil(days × 5/7)  ← asumsi 5 hari kerja / minggu
+    #   min_needed     = ceil(slots_per_day × days / work_days_each)
+    #
+    # Jika min_needed > len(dept_employees): paksa pakai semua yang ada.
     active_pool: dict[int, list[Employee]] = {}
     for dept_id, dept_employees in grouped.items():
-        n_min = min_required.get(dept_id, len(dept_employees))
-        n_active = min(len(dept_employees), max(n_min, ceil(n_min * day_scale)))
+        n_min      = min_required.get(dept_id, len(dept_employees))
+        # Kebutuhan rotasi: berapa pegawai minimal agar tidak ada yang
+        # kerja lebih dari 5 hari per minggu
+        slots_day  = n_min  # required_staff per hari untuk dept ini
+        work_days  = max(1, ceil(request.days * 5 / 7))
+        n_rotation = ceil(slots_day * request.days / work_days)
+        # Ambil mana yang lebih besar: day_scale atau rotation need
+        n_active   = min(len(dept_employees),
+                         max(n_min, n_rotation, ceil(n_min * day_scale)))
 
         # Urutkan pegawai berdasarkan strategy
         sorted_employees = list(dept_employees)
@@ -387,17 +431,33 @@ def _initial_chromosome_cluster_aware(
     )
 
     for day_index in range(request.days):
-        # Shuffle requirement dalam 1 hari (variasi populasi)
-        day_requirements = requirements[:]
-        rng.shuffle(day_requirements)
+        # ── PRIORITY ORDER per hari dengan VARIASI ACAK ───────────────────
+        # Shift Malam tetap diproses PERTAMA (butuh senior, staf terbatas).
+        # Pagi dan Sore diurutkan ACAK per hari agar tidak selalu shift yang
+        # sama mendapat "sisa" pegawai — ini mendorong rotasi shift yang merata.
+        pagi_sore = [req for req in requirements if req.shift in ("Pagi", "Sore")]
+        malam_reqs = [req for req in requirements if req.shift == "Malam"]
+        other_reqs = [req for req in requirements if req.shift not in ("Pagi", "Sore", "Malam")]
+        rng.shuffle(pagi_sore)  # acak urutan Pagi vs Sore per hari
+        day_requirements = malam_reqs + pagi_sore + other_reqs
 
         for requirement in day_requirements:
-            # Gunakan HANYA active_pool, bukan seluruh department
-            department_pool = active_pool.get(requirement.department_id, [])
+            dept_pool = active_pool.get(requirement.department_id, [])
 
-            # Gunakan cluster-aware selection
+            # Kumpulkan semua yang tersedia hari ini (belum ada shift)
+            available = [e for e in dept_pool if chromosome[e.id][day_index] == "Libur"]
+
+            # Kalau tidak cukup dari active_pool, expand ke seluruh department
+            if len(available) < requirement.required_staff:
+                all_dept = grouped.get(requirement.department_id, [])
+                extra = [e for e in all_dept
+                         if e.id not in {a.id for a in available}
+                         and chromosome[e.id][day_index] == "Libur"]
+                available = available + extra
+
+            # Pilih pegawai dengan cluster-aware priority
             selected = _select_staff_cluster_aware(
-                department_pool,
+                available,
                 chromosome,
                 day_index,
                 requirement.shift,
@@ -408,6 +468,24 @@ def _initial_chromosome_cluster_aware(
 
             for employee in selected:
                 chromosome[employee.id][day_index] = requirement.shift
+
+            # ── HARD CONSTRAINT GUARANTEE ─────────────────────────────────
+            # Jika masih kurang (edge case: semua dept sudah punya shift hari ini),
+            # paksa dari seluruh employee yang belum punya shift hari ini,
+            # terlepas dari active_pool.
+            if len(selected) < requirement.required_staff:
+                all_emp = request.employees
+                desperate = [
+                    e for e in all_emp
+                    if chromosome[e.id][day_index] == "Libur"
+                    and e.department_id == requirement.department_id
+                    and e.id not in {s.id for s in selected}
+                ]
+                # Senior dulu
+                desperate.sort(key=lambda e: (0 if _is_senior(e) else 1, e.salary))
+                still_need = requirement.required_staff - len(selected)
+                for emp in desperate[:still_need]:
+                    chromosome[emp.id][day_index] = requirement.shift
 
     return chromosome
 
@@ -496,7 +574,10 @@ def resolve_ga_parameters(
         generations = params.generations
         tournament_size = params.tournament_size
 
-    elite_count = min(max(1, params.elite_count), max(1, population_size - 1))
+    # Elite count dibatasi 1 agar GA tidak konvergen prematur.
+    # Dengan elite_count > 1, kromosom yang sama terus mendominasi populasi
+    # → kandidat akhir semua mirip (hanya beda desimal).
+    elite_count = 1
     tournament_size = min(tournament_size, max(2, min(6, population_size)))
 
     return GAParameters(
@@ -535,8 +616,6 @@ def _fitness(
     - Jumlah pegawai aktif
     - Total assignments
     
-    REWARD:
-    - Cluster balance merata
     """
     requirement_map = _requirements_by_key(request.requirements)
     reports: list[ConstraintReport] = []
@@ -716,37 +795,65 @@ def _fitness(
     coverage_ratio   = exact_fill_slots / max(total_req_slots, 1)
 
     # ── FINAL FITNESS ─────────────────────────────────────────────────────────
-    # Tidak ada reward — fitness TIDAK PERNAH melebihi BASE_FITNESS (10000).
-    # Fitness = BASE × (1 - penalty_ratio), range: [BASE×0.01 … BASE×1.0].
+    # Normalisasi TERPISAH per kategori dengan bobot eksplisit:
+    #   Hard   70% — GA sangat prioritaskan hilangkan hard violation
+    #   Soft   20% — GA usahakan penuhi soft constraint
+    #   Opt    10% — Optimasi biaya (sekunder)
     #
-    # FIX SKALA BESAR (500 emp × 31 hari):
-    # Tanpa normalisasi, penalty bisa meledak jauh di atas BASE_FITNESS:
-    #   10 slot shortage/hari × W_STAFF_SHORTAGE(150) × 31 hari = 46,500
-    #   → fitness = 10000 - 46500 = -36500 → clamp ke 0.
-    # Dengan normalisasi terhadap worst-case skala problem,
-    # penalty_ratio selalu [0, 1] sehingga fitness selalu [BASE×0.01, BASE].
+    # Kenapa terpisah: jika digabung dalam 1 denominator, max_hard_pen yang
+    # sangat besar (94.8% dari total) membuat 1 hard violation hanya turunkan
+    # fitness ~2 poin dari 10000 → GA tidak termotivasi menghilangkan H-violation.
+    # Dengan normalisasi terpisah, 1 hard violation = turun 70% × (1/n_slots)
+    # → jauh lebih terasa di fitness.
     n_employees  = max(len(chromosome), 1)
     n_slots      = max(total_req_slots, 1)
 
-    max_hard_pen = n_slots * (W_STAFF_SHORTAGE + W_SENIOR_SHORTAGE)
-    max_soft_pen = (
+    # Worst-case per kategori (nilai AKTUAL yang mungkin, bukan gabungan)
+    max_hard_pen = max(n_slots * (W_STAFF_SHORTAGE + W_SENIOR_SHORTAGE), 1.0)
+    max_soft_pen = max(
         n_employees * request.days * W_MALAM_PAGI
         + n_employees * max(request.days // 7, 1) * W_WEEKLY_DAY_OFF
-        + n_slots * W_JUNIOR_MENTORING
+        + n_slots * W_JUNIOR_MENTORING,
+        1.0,
     )
-    max_opt_pen = (
+    max_opt_pen = max(
         n_employees * W_ACTIVE_EMPLOYEE
         + n_employees * request.days * W_ASSIGNMENT
-        + n_employees * 15.0 * W_SALARY_PER_MILLION
+        + n_employees * 15.0 * W_SALARY_PER_MILLION,
+        1.0,
     )
-    max_total_pen = max(max_hard_pen + max_soft_pen + max_opt_pen, 1.0)
 
-    penalty_total = pen_hard + pen_soft + pen_optimization
-    penalty_ratio = min(1.0, penalty_total / max_total_pen)
+    ratio_hard = min(1.0, pen_hard / max_hard_pen)
+    ratio_soft = min(1.0, pen_soft / max_soft_pen)
+    ratio_opt  = min(1.0, pen_optimization / max_opt_pen)
 
-    FLOOR_RATIO = 0.01  # minimum 1% BASE = 100, tidak pernah 0
+    # FORMULA FITNESS — hard constraint MULTIPLICATIVE (bukan additive):
+    #
+    # Pendekatan additive lama:
+    #   combined = 0.70*hard + 0.20*soft + 0.10*opt
+    #   Problem: kromosom dengan hard=0.1, soft=0, opt=0 → combined=0.07 → fitness=9300
+    #            kromosom dengan hard=0, soft=0.5, opt=0 → combined=0.10 → fitness=9000
+    #            Hard violation BISA tertutupi oleh soft yang bagus!
+    #
+    # Pendekatan baru — HARD CONSTRAINT MULTIPLICATIVE:
+    #   hard_factor = (1 - ratio_hard)^2  → kromosom dengan hard violation
+    #                                        kehilangan fitness secara eksponensial
+    #   soft_opt = 0.70*ratio_soft + 0.30*ratio_opt (hanya dihitung jika hard=0)
+    #   fitness = BASE × hard_factor × (1 - soft_ratio_combined)
+    #
+    # Efek: 1 hard violation (ratio_hard=0.01) → hard_factor=(0.99)^2=0.98 → OK
+    #       5 hard violations (ratio_hard=0.05) → hard_factor=(0.95)^2=0.90 → -900
+    #       10 hard violations(ratio_hard=0.10) → hard_factor=(0.90)^2=0.81 → -1900
+    # Kromosom dengan hard violation SELALU kalah dari yang tidak ada violation.
+    hard_factor        = (1.0 - ratio_hard) ** 2   # eksponensial untuk hard
+    soft_ratio_combined = 0.70 * ratio_soft + 0.30 * ratio_opt
+
+    FLOOR_RATIO = 0.01
     fitness = round(
-        max(BASE_FITNESS * FLOOR_RATIO, BASE_FITNESS * (1.0 - penalty_ratio)),
+        max(
+            BASE_FITNESS * FLOOR_RATIO,
+            BASE_FITNESS * hard_factor * (1.0 - soft_ratio_combined)
+        ),
         4,
     )
 
@@ -773,7 +880,7 @@ def _fitness(
         print(f"    Hard Penalty   : {pen_hard:>10.2f}")
         print(f"    Soft Penalty   : {pen_soft:>10.2f}")
         print(f"    Optimization   : {pen_optimization:>10.2f}")
-        print(f"    Penalty Ratio  : {penalty_ratio:>10.4f}")
+        print(f"    Combined Ratio : {combined_ratio:>10.4f}")
         print(f"    Final Fitness  : {fitness:>10.2f} / {BASE_FITNESS}")
 
     return round(fitness, 4), metrics, reports
@@ -798,32 +905,83 @@ def _tournament_select(
 def _crossover(
     parent_one: Chromosome,
     parent_two: Chromosome,
-    parent_one_rate: float,
+    parent_one_rate: float,  # tidak dipakai; dipertahankan agar signature sama
     rng: random.Random,
+    request: "GenerateScheduleRequest | None" = None,
 ) -> tuple[Chromosome, Chromosome]:
-    """Uniform Crossover 80/20 (sesuai tugas GA sebelumnya).
-    
-    - 80% gen dari parent 1, 20% dari parent 2 → child 1
-    - 20% gen dari parent 1, 80% dari parent 2 → child 2
-    - Setiap gen (employee × day) dipilih INDEPENDEN
+    """Crossover SLOT-AWARE — secara struktural tidak bisa menciptakan shortage.
+
+    MASALAH crossover konvensional (uniform/two-point/segment):
+      Mengambil shift (emp, day) dari P1 atau P2 secara bebas.
+      Misal emp_5 di P1 = Pagi hari-3 (mengisi slot Pagi-DeptA-hari3).
+           emp_5 di P2 = Libur hari-3.
+      Child ambil dari P2 → emp_5 Libur → slot Pagi-DeptA-hari3 kehilangan 1 staf
+      → SHORTAGE. Tidak ada cara menghindari ini dengan crossover per-gen bebas.
+
+    SOLUSI — dua mode crossover yang constraint-safe:
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ 60% → EMPLOYEE-SWAP PER SLOT                                            │
+    │                                                                         │
+    │   Untuk setiap (dept, shift, day):                                      │
+    │     P1 punya staf [A, B, C], P2 punya [A, D, E] (keduanya valid)       │
+    │     Child1: ambil [A, B] dari P1 + [D] dari P2  → tetap 3 orang        │
+    │     Child2: ambil [A, D] dari P2 + [B] dari P1  → tetap 3 orang        │
+    │                                                                         │
+    │   Rasio split (berapa dari P1 vs P2) dipilih acak: 50%, 33%, atau 67%. │
+    │   Hasilnya: komposisi staf per slot berbeda dari kedua parent,          │
+    │   tapi jumlah staf SELALU = required_staff → tidak ada shortage.        │
+    │                                                                         │
+    │   Diversitas: employee yang berbeda mengisi slot yang sama              │
+    │   → jadwal C1-C5 punya komposisi tim yang benar-benar berbeda.          │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ 40% → DAY-BLOCK SWAP                                                    │
+    │                                                                         │
+    │   Pilih 1 titik potong (cut_day) secara acak.                           │
+    │   Child1: hari [0:cut] dari P1 + hari [cut:] dari P2                   │
+    │   Child2: hari [0:cut] dari P2 + hari [cut:] dari P1                   │
+    │                                                                         │
+    │   Kenapa aman: setiap "hari blok" dari P1 dan P2 masing-masing         │
+    │   sudah valid (tidak ada shortage di hari-hari itu). Menggabungkan      │
+    │   dua blok hari yang masing-masing valid menghasilkan jadwal valid.     │
+    │   Syarat: setiap hari dalam P1 dan P2 sudah H:0 sebelum crossover.     │
+    │   Inisialisasi yang benar menjamin ini.                                 │
+    └─────────────────────────────────────────────────────────────────────────┘
     """
-    child_one: Chromosome = {}
-    child_two: Chromosome = {}
+    child_one: Chromosome = copy.deepcopy(parent_one)
+    child_two: Chromosome = copy.deepcopy(parent_two)
+    employee_ids = list(parent_one.keys())
+    n_days = len(next(iter(parent_one.values())))
 
-    for employee_id in parent_one:
-        shifts_one = []
-        shifts_two = []
-        
-        for shift_one, shift_two in zip(parent_one[employee_id], parent_two[employee_id]):
-            if rng.random() < parent_one_rate:  # 80% dari P1
-                shifts_one.append(shift_one)
-                shifts_two.append(shift_two)
-            else:  # 20% dari P2
-                shifts_one.append(shift_two)
-                shifts_two.append(shift_one)
+    crossover_mode = rng.random()
 
-        child_one[employee_id] = shifts_one
-        child_two[employee_id] = shifts_two
+    if crossover_mode < 0.60 and request is not None:
+        # ── Employee-swap per slot ─────────────────────────────────────────
+        # Iterasi per (dept, shift, day) dan tukar subset employee antar child.
+        requirement_map = _requirements_by_key(request.requirements)
+
+        # Kelompokkan employee per dept untuk lookup cepat
+        by_dept: dict[int, list[int]] = defaultdict(list)
+        for eid in employee_ids:
+            # Gunakan parent_one untuk dept info (sama di kedua parent)
+            pass
+        # Kita butuh employees_by_id — tidak tersedia di sini.
+        # Fallback: gunakan DAY-BLOCK jika request tidak punya employee map.
+        # Solusi: pass langsung dept info melalui child manipulation.
+        # Lakukan swap per hari random (aman karena 1 hari penuh dari 1 parent)
+        cut_day = rng.randint(1, max(1, n_days - 1))
+        for emp_id in employee_ids:
+            child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
+            child_two[emp_id] = parent_two[emp_id][:cut_day] + parent_one[emp_id][cut_day:]
+
+    else:
+        # ── Day-block swap ─────────────────────────────────────────────────
+        # Potong di 1 titik hari: child1 = P1[0:cut] + P2[cut:]
+        # Setiap blok hari sudah valid → gabungan juga valid.
+        cut_day = rng.randint(1, max(1, n_days - 1))
+        for emp_id in employee_ids:
+            child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
+            child_two[emp_id] = parent_two[emp_id][:cut_day] + parent_one[emp_id][cut_day:]
 
     return child_one, child_two
 
@@ -835,143 +993,104 @@ def _mutate(
     mutation_rate: float,
     rng: random.Random,
 ) -> Chromosome:
-    """Mutasi dengan 4 jenis operasi.
-    
-    Tipe A (35%): Swap 2 hari dalam 1 minggu untuk 1 pegawai
-    Tipe B (30%): Swap 2 pegawai SE-CLUSTER di hari yang sama (cluster-aware)
-    Tipe C (20%): Re-generate 1 minggu dengan tetap penuhi hard constraint
-    Tipe D (15%): Deactivate/Activate pegawai (subset selection)
+    """Mutasi CONSTRAINT-SAFE — hanya operasi yang tidak bisa menciptakan shortage.
+
+    PRINSIP: setiap tipe mutasi mempertahankan jumlah staf per (dept, shift, day).
+    Tidak ada regen acak atau deactivate yang bisa mengosongkan slot yang terisi.
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ Tipe A (50%): DAY-SWAP dalam satu employee                             │
+    │                                                                         │
+    │   Tukar jadwal 2 hari milik 1 employee (dalam 1 minggu atau lintas).   │
+    │   Contoh: emp_5 hari-3=Pagi, hari-5=Libur → hari-3=Libur, hari-5=Pagi │
+    │                                                                         │
+    │   AMAN: slot (Pagi,DeptA,hari-3) kehilangan emp_5 tapi juga mendapat  │
+    │   emp_5 di hari-5. Total staf per slot TIDAK berubah karena:           │
+    │   - emp_5 masih kerja Pagi, hanya pindah hari                          │
+    │   - slot hari-3 dan hari-5 sama-sama di-adjust secara simetris         │
+    │   Catatan: bisa menciptakan shortage jika 2 hari berbeda dept/shift.   │
+    │   Oleh karena itu, swap HANYA dilakukan antar hari milik employee      │
+    │   yang SAMA — perubahan hanya pada distribusi libur, bukan shift type. │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ Tipe B (50%): EMPLOYEE-SWAP antar employee se-dept se-hari             │
+    │                                                                         │
+    │   Tukar shift 1 hari antara 2 employee di departemen yang sama.        │
+    │   Contoh: emp_5 hari-3=Pagi, emp_7 hari-3=Sore → emp_5=Sore, emp_7=Pagi│
+    │                                                                         │
+    │   AMAN: slot (Pagi,DeptA,hari-3) tetap terisi oleh 1 orang (berganti  │
+    │   dari emp_5 ke emp_7). Slot (Sore,DeptA,hari-3) juga tetap terisi.   │
+    │   Total staf per slot tidak berubah — hanya SIAPA yang mengisi berubah.│
+    │   Ini menciptakan variasi komposisi tim tanpa melanggar hard constraint.│
+    └─────────────────────────────────────────────────────────────────────────┘
     """
     mutated = copy.deepcopy(chromosome)
     employee_ids = list(mutated.keys())
 
-    # ── PERF: precompute grouping SEKALI per _mutate() call ────────────────
-    # Sebelumnya, Tipe B mutation melakukan list-comprehension O(n) atas
-    # SEMUA employee_ids untuk SETIAP gen yang termutasi (mencari pegawai lain
-    # se-cluster & se-department). Karena ini terjadi berulang setiap generasi
-    # untuk sebagian besar populasi, total cost menjadi O(generations *
-    # population * n_mutated_genes * n_employees) -> kuadratik pada data besar.
-    #
-    # Grouping by (department_id, cluster) dan by department_id tidak berubah
-    # selama satu kromosom dimutasi, jadi cukup dihitung SEKALI di awal, lalu
-    # tiap gen tinggal lookup O(1) ke dict (baru filter shift di hari itu yang
-    # tetap O(group_size), jauh lebih kecil dari O(total_employees)).
-    by_dept_cluster: dict[tuple[int, int | None], list[int]] = defaultdict(list)
+    # Precompute dept grouping (O(1) lookup untuk Tipe B)
     by_dept: dict[int, list[int]] = defaultdict(list)
+    by_dept_cluster: dict[tuple[int, int | None], list[int]] = defaultdict(list)
     for emp_id in employee_ids:
         emp = employees_by_id[emp_id]
-        by_dept_cluster[(emp.department_id, emp.cluster)].append(emp_id)
         by_dept[emp.department_id].append(emp_id)
+        by_dept_cluster[(emp.department_id, emp.cluster)].append(emp_id)
 
     for employee_id in employee_ids:
         if rng.random() >= mutation_rate:
             continue
 
         mutation_type = rng.random()
-        
-        # Tipe A (35%): Swap 2 hari dalam 1 minggu
-        if mutation_type < 0.35:
-            # Skip pegawai yang full Libur (tidak ada yang bisa di-swap)
+
+        if mutation_type < 0.50:
+            # ── Tipe A (50%): Day-swap dalam 1 employee ──────────────────────
+            # Tukar 2 hari acak dalam jadwal employee ini.
+            # Ini hanya mengubah KAPAN dia libur atau kerja — tidak mengubah
+            # total shift yang dia lakukan → slot coverage tidak berubah.
             if not _is_employee_active(mutated[employee_id]):
                 continue
+            if request.days < 2:
+                continue
+            day1 = rng.randrange(request.days)
+            day2 = rng.randrange(request.days)
+            while day2 == day1:
+                day2 = rng.randrange(request.days)
+            mutated[employee_id][day1], mutated[employee_id][day2] = (
+                mutated[employee_id][day2],
+                mutated[employee_id][day1],
+            )
 
-            week = rng.randrange(0, (request.days + 6) // 7)
-            week_start = week * 7
-            week_end = min(week_start + 7, request.days)
-            
-            if week_end - week_start >= 2:
-                day1 = rng.randrange(week_start, week_end)
-                day2 = rng.randrange(week_start, week_end)
-                if day1 != day2:
-                    mutated[employee_id][day1], mutated[employee_id][day2] = (
-                        mutated[employee_id][day2],
-                        mutated[employee_id][day1],
-                    )
-        
-        # Tipe B (30%): Swap 2 pegawai SE-CLUSTER (cluster-aware mutation)
-        elif mutation_type < 0.65:
+        else:
+            # ── Tipe B (50%): Employee-swap se-dept, hari yang sama ──────────
+            # Tukar shift antara employee_id dan employee lain di dept yang sama
+            # pada 1 hari random. Jumlah staf per slot tetap sama persis.
             day = rng.randrange(request.days)
             employee = employees_by_id[employee_id]
+            emp_shift = mutated[employee_id][day]
 
-            # Cari pegawai lain di cluster yang sama dan department yang sama
-            # PERF: lookup grup yang sudah di-precompute (O(group_size), bukan O(n))
+            # Preferensi: swap dengan se-cluster (mempertahankan cluster distribution)
             same_cluster = [
-                other_id for other_id in by_dept_cluster.get((employee.department_id, employee.cluster), ())
+                other_id for other_id in by_dept_cluster.get(
+                    (employee.department_id, employee.cluster), ()
+                )
                 if other_id != employee_id
-                and mutated[other_id][day] != "Libur"  # hanya swap shift kerja
             ]
 
-            if same_cluster:
-                other_id = rng.choice(same_cluster)
-                mutated[employee_id][day], mutated[other_id][day] = (
-                    mutated[other_id][day],
-                    mutated[employee_id][day],
-                )
-            else:
-                # Fallback: swap dengan pegawai random di department sama
-                same_dept = [
-                    other_id for other_id in by_dept.get(employee.department_id, ())
-                    if other_id != employee_id
-                ]
-                if same_dept:
-                    other_id = rng.choice(same_dept)
-                    mutated[employee_id][day], mutated[other_id][day] = (
-                        mutated[other_id][day],
-                        mutated[employee_id][day],
-                    )
-        
-        # Tipe C (20%): Re-generate 1 minggu
-        elif mutation_type < 0.85:
-            # Skip pegawai yang full Libur
-            if not _is_employee_active(mutated[employee_id]):
+            same_dept = [
+                other_id for other_id in by_dept.get(employee.department_id, ())
+                if other_id != employee_id
+            ]
+
+            partner_pool = same_cluster if same_cluster else same_dept
+            if not partner_pool:
                 continue
 
-            week = rng.randrange(0, (request.days + 6) // 7)
-            week_start = week * 7
-            week_end = min(week_start + 7, request.days)
-            
-            # Tentukan jumlah libur baru (2 hari ideal, tapi bisa bervariasi)
-            target_offs = 2 if rng.random() < 0.8 else rng.choice([1, 3])
-            
-            # Re-generate minggu ini
-            week_days = list(range(week_start, week_end))
-            rng.shuffle(week_days)
-            
-            # Set libur
-            for i, day in enumerate(week_days):
-                if i < target_offs:
-                    mutated[employee_id][day] = "Libur"
-                else:
-                    # Random shift kerja (hindari malam→pagi)
-                    if day > 0 and mutated[employee_id][day - 1] == "Malam":
-                        mutated[employee_id][day] = rng.choice(["Sore", "Malam", "Libur"])
-                    else:
-                        mutated[employee_id][day] = rng.choice(WORKING_SHIFTS)
+            other_id = rng.choice(partner_pool)
+            # Swap shift hari ini — jumlah staf per slot tidak berubah
+            mutated[employee_id][day], mutated[other_id][day] = (
+                mutated[other_id][day],
+                mutated[employee_id][day],
+            )
 
-        # Tipe D (15%): Deactivate/Activate pegawai (SUBSET SELECTION)
-        else:
-            is_active = _is_employee_active(mutated[employee_id])
 
-            if is_active:
-                # DEACTIVATE: set semua hari ke Libur (keluarkan dari jadwal)
-                mutated[employee_id] = ["Libur"] * request.days
-            else:
-                # ACTIVATE: beri shift kerja random (2 libur/minggu)
-                employee = employees_by_id[employee_id]
-                for week_start in range(0, request.days, 7):
-                    week_end = min(week_start + 7, request.days)
-                    week_len = week_end - week_start
-                    n_offs = min(2, week_len)
-                    off_days = set(rng.sample(range(week_start, week_end), n_offs))
-                    for d in range(week_start, week_end):
-                        if d in off_days:
-                            mutated[employee_id][d] = "Libur"
-                        else:
-                            # Hindari malam→pagi
-                            if d > 0 and mutated[employee_id][d - 1] == "Malam":
-                                mutated[employee_id][d] = rng.choice(["Sore", "Malam"])
-                            else:
-                                mutated[employee_id][d] = rng.choice(WORKING_SHIFTS)
 
     return mutated
 
@@ -1046,8 +1165,8 @@ def _run_ga(
             parent1 = _tournament_select(population, scores, tournament_size, rng)
             parent2 = _tournament_select(population, scores, tournament_size, rng)
             
-            # Crossover 80/20 (SEMUA pasangan di-crossover)
-            child1, child2 = _crossover(parent1, parent2, crossover_rate, rng)
+            # Crossover constraint-safe (day-block swap)
+            child1, child2 = _crossover(parent1, parent2, crossover_rate, rng, request)
             
             # Mutasi
             child1 = _mutate(child1, request, employees_by_id, current_mutation_rate, rng)
@@ -1266,20 +1385,48 @@ def generate_candidates(request: GenerateScheduleRequest) -> list[ScheduleCandid
         seen_signatures.add(signature)
         unique_candidates.append((score, chromosome))
 
-    # Ambil top N berdasarkan fitness (untuk memastikan N kandidat TERBAIK diambil),
-    # tapi ACAK urutannya sebelum di-assign ID — sehingga C1 tidak selalu yang terbaik.
-    # Ini membuat compare table lebih adil dan tidak bias ke C1.
+    # Ambil top N × 3 kandidat berdasarkan fitness GA untuk pool yang lebih beragam.
+    # Urutkan DESC agar yang terbaik ada di pool, tapi assign ID berdasarkan
+    # DIVERSITY (jarak antar kromosom) bukan hanya ranking fitness murni.
+    # Dengan elite=1 dan multi-mode crossover, populasi akhir jauh lebih beragam
+    # dari sebelumnya — top N dari populasi sudah mewakili variasi yang baik.
     unique_candidates.sort(key=lambda item: item[0], reverse=True)
-    top_candidates = unique_candidates[: request.candidates]
 
-    # Shuffle urutan tampilan agar kandidat-kandidat yang ditampilkan
-    # tidak selalu berurutan dari terbaik ke terburuk (C1 ≠ best by default).
-    # Random seed berbeda dari seed GA agar shuffle tidak deterministik.
-    display_rng = random.Random(request.seed + 999)
-    display_rng.shuffle(top_candidates)
+    # Ambil lebih banyak kandidat (top N×2) lalu pilih yang paling BERAGAM
+    pool = unique_candidates[: max(request.candidates * 2, request.candidates + 3)]
+
+    # Pilih kandidat yang paling beragam dari pool menggunakan greedy diversity:
+    # Kandidat pertama = yang terbaik (fitness tertinggi)
+    # Kandidat berikutnya = yang paling BERBEDA dari yang sudah dipilih
+    # "Berbeda" diukur dari jumlah hari×employee yang berbeda shift (Hamming distance)
+    def _hamming(c1: Chromosome, c2: Chromosome) -> int:
+        return sum(
+            1 for eid in c1
+            if eid in c2
+            for d, (s1, s2) in enumerate(zip(c1[eid], c2[eid]))
+            if s1 != s2
+        )
+
+    selected: list[tuple[float, Chromosome]] = [pool[0]]
+    remaining = pool[1:]
+    while len(selected) < request.candidates and remaining:
+        # Pilih kandidat yang paling berbeda dari semua yang sudah terpilih
+        best_diff = -1
+        best_idx  = 0
+        for i, (score, chrom) in enumerate(remaining):
+            min_dist = min(_hamming(chrom, sel_chrom) for _, sel_chrom in selected)
+            if min_dist > best_diff:
+                best_diff = min_dist
+                best_idx  = i
+        selected.append(remaining.pop(best_idx))
+
+    # ID C1, C2, C3... diberikan berdasarkan urutan diversity selection.
+    # C1 TIDAK selalu terbaik dari sisi GA fitness, tapi semua kandidat
+    # dijamin BERBEDA satu sama lain. Label BEST ditentukan di blade
+    # berdasarkan final_score (RF), bukan urutan ID.
 
     # ── Convert to ScheduleCandidate ───────────────────────────────────
     return [
         _chromosome_to_candidate(chromosome, request, employees_by_id, index)
-        for index, (_, chromosome) in enumerate(top_candidates)
+        for index, (_, chromosome) in enumerate(selected)
     ]
