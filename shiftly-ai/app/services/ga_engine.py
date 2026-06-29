@@ -757,32 +757,12 @@ def _crossover(
     employee_ids = list(parent_one.keys())
     n_days = len(next(iter(parent_one.values())))
 
-    crossover_mode = rng.random()
-
-    if crossover_mode < 0.60 and request is not None:
-        # ── Employee-swap per slot
-        # Iterasi per (dept, shift, day) dan tukar subset employee antar child.
-        requirement_map = _requirements_by_key(request.requirements)
-
-        # Kelompokkan employee per dept untuk lookup cepat
-        by_dept: dict[int, list[int]] = defaultdict(list)
-        for eid in employee_ids:
-            # Gunakan parent_one untuk dept info (sama di kedua parent)
-            pass
-        # Kita butuh employees_by_id — tidak tersedia di sini.
-        # Fallback: gunakan DAY-BLOCK jika request tidak punya employee map.
-        cut_day = rng.randint(1, max(1, n_days - 1))
-        for emp_id in employee_ids:
-            child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
-            child_two[emp_id] = parent_two[emp_id][:cut_day] + parent_one[emp_id][cut_day:]
-
-    else:
-        # ── Day-block swap ─────────────────────────────────────────────────
-        # Potong di 1 titik hari: child1 = P1[0:cut] + P2[cut:]
-        cut_day = rng.randint(1, max(1, n_days - 1))
-        for emp_id in employee_ids:
-            child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
-            child_two[emp_id] = parent_two[emp_id][:cut_day] + parent_one[emp_id][cut_day:]
+    # ── Day-block swap ─────────────────────────────────────────────────
+    # Potong di 1 titik hari: child1 = P1[0:cut] + P2[cut:]
+    cut_day = rng.randint(1, max(1, n_days - 1))
+    for emp_id in employee_ids:
+        child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
+        child_two[emp_id] = parent_two[emp_id][:cut_day] + parent_one[emp_id][cut_day:]
 
     return child_one, child_two
 
