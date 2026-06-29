@@ -1,17 +1,3 @@
-"""Genetic Algorithm untuk generate kandidat jadwal Shiftly.
-
-GA ini mengikuti struktur tugas GA sebelumnya dengan:
-- Elitism: kromosom terbaik langsung dipertahankan
-- Adaptive Mutation: rate naik saat stagnan, turun saat membaik
-- Early Stopping: berhenti jika tidak ada improvement signifikan
-- Tournament Selection: pilih parent terbaik dari k kandidat
-- Crossover 80/20: 80% gen dari parent 1, 20% dari parent 2
-- Cluster-Aware Initialization: memanfaatkan label cluster untuk populasi awal
-- Hard/Soft Constraint Separation: hard constraint penalti jauh lebih besar
-
-Fitness: BASE_FITNESS - penalty (higher is better)
-"""
-
 from __future__ import annotations
 
 import copy
@@ -39,40 +25,18 @@ ALL_SHIFTS = ["Pagi", "Sore", "Malam", "Libur"]
 BASE_FITNESS = 10000.0
 
 # ── HARD CONSTRAINTS ─────────────────────────────────────────────────────────
-# Penalti besar → GA sangat menghindari pelanggaran ini.
-# W_STAFF_SHORTAGE tinggi karena kekurangan pegawai di shift RS = risiko nyawa.
-# W_SENIOR_SHORTAGE lebih tinggi dari SHORTAGE karena kepala shift = koordinasi kritis.
-# W_STAFF_SHORTAGE dan W_SENIOR_SHORTAGE dinaikkan drastis agar GA
-# menghindari hard violation secara natural TANPA repair mechanism.
-# Tanpa repair, satu-satunya cara GA menghindari hard violation adalah
-# jika fitness-nya turun sangat drastis saat ada shortage.
-# Nilai 300/360 membuat kromosom dengan shortage SELALU kalah dari
-# kromosom tanpa shortage dalam tournament selection.
-W_STAFF_SHORTAGE  = 500.0    # naik lagi: 1 shortage = -500 langsung
-W_STAFF_OVER      = 5.0      # tetap: overstaff masih ditoleransi
-W_SENIOR_SHORTAGE = 600.0    # naik lagi: tanpa kepala shift = shutdown operasional
+W_STAFF_SHORTAGE  = 500.0    
+W_SENIOR_SHORTAGE = 600.0   
 
 # ── SOFT CONSTRAINTS ─────────────────────────────────────────────────────────
-# Penalti sedang → GA usahakan penuhi, tapi boleh dilanggar jika terpaksa.
-# W_MALAM_PAGI kecil karena terkadang tidak terhindarkan di RS 24 jam.
-# W_WEEKLY_DAY_OFF penting untuk kesehatan pegawai (regulasi ketenagakerjaan).
-W_MALAM_PAGI        = 2.0    # shift malam→pagi berturut (ergonomi)
-W_WEEKLY_DAY_OFF    = 8.0    # deviasi dari 2 hari libur/minggu (NAIK: wajib libur)
-W_JUNIOR_MENTORING  = 3.0    # junior tanpa senior (mentoring safety)
+W_STAFF_OVER      = 5.0   
+W_MALAM_PAGI        = 2.0  
+W_WEEKLY_DAY_OFF    = 8.0   
+W_JUNIOR_MENTORING  = 3.0   
 
-# ── OPTIMIZATION ─────────────────────────────────────────────────────────────
-# Meminimalkan biaya operasional.
-# W_SALARY_PER_MILLION dinaikkan agar GA lebih agresif pilih pegawai murah.
-W_ACTIVE_EMPLOYEE     = 4.0  # per pegawai aktif (dorong efisiensi jumlah staf)
-W_ASSIGNMENT          = 0.4  # per assignment (dorong minimasi total shift)
-W_SALARY_PER_MILLION  = 2.5  # per juta Rp total gaji (NAIK: kontrol biaya lebih ketat)
-
-# ── REWARD ───────────────────────────────────────────────────────────────────
-# Bonus untuk kromosom dengan distribusi cluster merata (A/B/C/D seimbang per shift).
-# Reward tinggi mendorong GA mencampur senior+junior merata di tiap shift.
-# Juga ada reward baru: shift_coverage_reward untuk bonus jika semua slot terpenuhi pas.
-# Reward dihapus — fitness tidak pernah melebihi BASE_FITNESS (10000).
-# cluster_balance dan coverage_ratio tetap dihitung untuk metrics & RF features.
+W_ACTIVE_EMPLOYEE     = 4.0  
+W_ASSIGNMENT          = 0.4  
+W_SALARY_PER_MILLION  = 2.5 
 
 Chromosome = dict[int, list[str]]
 RequirementKey = tuple[int, str]
@@ -141,14 +105,6 @@ def _is_employee_active(shifts: list[str]) -> bool:
 
 
 def _cluster_balance(chromosome: Chromosome, employees_by_id: dict[int, Employee]) -> float:
-    """Hitung keseimbangan distribusi cluster per shift.
-    
-    Semakin merata distribusi cluster, semakin tinggi skor (0-1).
-    Formula: 1 - (coefficient_of_variation / 2)
-    
-    Perfect balance (semua cluster sama): 1.0
-    Very imbalanced: 0.0
-    """
     cluster_counts = Counter()
 
     for employee_id, shifts in chromosome.items():
@@ -191,31 +147,12 @@ def _select_staff_cluster_aware(
     required_senior: int,
     rng: random.Random,
 ) -> list[Employee]:
-    """Pilih pegawai dengan CLUSTER-AWARE strategy.
-    
-    Prioritas:
-    1. Cluster A (senior) untuk kepala shift (wajib minimal required_senior)
-    2. Cluster C (high performer) untuk stabilitas
-    3. Cluster B (junior) untuk cost-efficiency
-    4. Cluster D (watchlist) hanya jika terpaksa, dan tidak berturutan shift berat
-    
-    Hindari:
-    - Malam→Pagi berturut (soft constraint)
-    - Pegawai yang sudah mendapat shift di hari itu
-    """
-    # Filter available: belum ada shift di hari itu
     available = [
         emp for emp in employees
         if chromosome[emp.id][day_index] == "Libur"
     ]
 
     if not available:
-        # Semua pegawai sudah punya shift di hari ini.
-        # Daripada return [] (→ hard violation pasti), izinkan pegawai yang
-        # sudah dapat shift BERBEDA untuk double-shift sebagai fallback.
-        # GA akan mengeliminasi kromosom ini via fitness (overwork = soft penalty),
-        # tapi setidaknya hard constraint STAFF terpenuhi di inisialisasi.
-        # One-shift-per-day rule tetap dipertahankan untuk shift YANG SAMA.
         available = [
             emp for emp in employees
             if chromosome[emp.id][day_index] not in ("Libur", shift)
@@ -322,21 +259,6 @@ def _initial_chromosome_cluster_aware(
     rng: random.Random,
     strategy: str = "balanced",
 ) -> Chromosome:
-    """Buat kromosom DENGAN CLUSTER-AWARE INITIALIZATION + SUBSET SELECTION.
-    
-    Sesuai proposal: 'K-Means Clustering digunakan untuk segmentasi profil pegawai.
-    Hasilnya dimanfaatkan sebagai dasar inisialisasi populasi awal pada algoritma
-    optimasi, memandu GA dalam menyusun populasi kandidat jadwal awal yang lebih
-    berkualitas dan terdistribusi dengan baik.'
-    
-    SUBSET SELECTION:
-    Hanya aktifkan sebagian pegawai dari pool. Jumlah aktif tergantung strategy:
-    - 'balanced': ~120% dari minimum (buffer cukup)
-    - 'cost_efficient': ~105% dari minimum (sangat ketat, hemat biaya)
-    - 'quality_first': ~135% dari minimum (lebih banyak pilihan berkualitas)
-    Pegawai yang tidak terpilih tetap full Libur (tidak aktif dalam jadwal).
-    """
-    # Semua pegawai mulai dengan full Libur
     chromosome = {
         employee.id: ["Libur" for _ in range(request.days)]
         for employee in request.employees
@@ -495,15 +417,6 @@ def _initial_population(
     population_size: int,
     rng: random.Random,
 ) -> list[Chromosome]:
-    """Buat populasi awal dengan CLUSTER-AWARE DIVERSIFICATION.
-    
-    Sesuai tugas GA sebelumnya:
-    - 50% balanced (hard+soft constraint terpenuhi)
-    - 30% cost_efficient (prioritas cluster B)
-    - 20% quality_first (prioritas cluster A+C)
-    
-    Ini memastikan populasi SUDAH BAIK dari awal (tidak random buta).
-    """
     employees_by_cluster = _employees_by_cluster(request.employees)
     population: list[Chromosome] = []
 
@@ -596,43 +509,9 @@ def _fitness(
     employees_by_id: dict[int, Employee],
     verbose: bool = False,
 ) -> tuple[float, dict[str, int | float], list[ConstraintReport]]:
-    """Hitung fitness kromosom dengan HARD/SOFT CONSTRAINT SEPARATION.
-    
-    Formula (sesuai tugas GA sebelumnya):
-      penalty_total = 0.75 × norm_hard + 0.25 × norm_soft  (hard DOMINAN)
-      fitness = BASE_FITNESS × (1 - penalty_total)
-    
-    HARD Constraints (penalti BESAR, wajib dipenuhi):
-    - Jumlah pegawai per shift: kurang/lebih dari requirement
-    - Senior per shift: minimal required_senior (kepala shift)
-    
-    SOFT Constraints (penalti KECIL, boleh dilanggar kondisi darurat):
-    - Libur: ±2 hari per minggu
-    - Malam→Pagi berturut (ergonomi)
-    - Junior tanpa senior (mentoring)
-    
-    OPTIMIZATION (meminimalkan biaya):
-    - Total gaji pegawai aktif
-    - Jumlah pegawai aktif
-    - Total assignments
-    
-    """
     requirement_map = _requirements_by_key(request.requirements)
     reports: list[ConstraintReport] = []
 
-    # ── PERF: bangun index assignment SEKALI saja ──────────────────────────
-    # Sebelumnya, hard-constraint loop dan junior-mentoring loop masing-masing
-    # melakukan scan penuh ke SELURUH chromosome untuk setiap (day, requirement)
-    # -> O(days * requirements * employees), yang meledak pada data besar
-    # (ratusan/ribuan pegawai x puluhan hari x puluhan requirement).
-    #
-    # Di sini kita scan chromosome HANYA SEKALI (O(employees * days)) untuk
-    # membangun index per (department_id, shift, day_index): jumlah staff,
-    # jumlah senior, dan jumlah junior. Hard-constraint loop dan mentoring
-    # loop lalu tinggal O(1) lookup ke index ini -> total jadi
-    # O(employees * days + requirements * days), bukan O(requirements * days * employees).
-    #
-    # Hasil fitness numerik TIDAK BERUBAH — hanya cara hitungnya yang lebih cepat.
     staff_count: dict[tuple[int, str, int], int] = defaultdict(int)
     senior_count: dict[tuple[int, str, int], int] = defaultdict(int)
     junior_count: dict[tuple[int, str, int], int] = defaultdict(int)
@@ -663,7 +542,7 @@ def _fitness(
         current_date = request.start_date + timedelta(days=day_index)
 
         for (department_id, shift), requirement in requirement_map.items():
-            # O(1) lookup ke index (sebelumnya: O(employees) scan)
+            # O(1) lookup ke index
             key = (department_id, shift, day_index)
             actual_staff = staff_count.get(key, 0)
             actual_senior = senior_count.get(key, 0)
@@ -672,13 +551,12 @@ def _fitness(
             extra_staff = max(0, actual_staff - requirement.required_staff)
             missing_senior = max(0, requirement.required_senior - actual_senior)
             
-            # HARD: kurang pegawai (KRITIS)
+            # HARD: kurang pegawai
             if missing_staff > 0:
                 pen_hard += missing_staff * W_STAFF_SHORTAGE
                 staff_shortage += missing_staff
                 hard_violation_count += 1
             
-            # HARD: lebih pegawai (pemborosan)
             if extra_staff > 0:
                 pen_hard += extra_staff * W_STAFF_OVER
                 staff_over += extra_staff
@@ -715,7 +593,6 @@ def _fitness(
     total_assignments = 0
     shift_counts = Counter({"Pagi": 0, "Sore": 0, "Malam": 0, "Libur": 0})
 
-    # Per pegawai: libur dan malam→pagi
     for employee_id, shifts in chromosome.items():
         # Skip pegawai yang full Libur (tidak aktif dalam jadwal ini)
         # Mereka bukan bagian jadwal, jadi tidak dihitung di soft constraint
@@ -732,13 +609,12 @@ def _fitness(
             if shift != "Libur":
                 total_assignments += 1
 
-            # SOFT: malam→pagi berturut
             if index > 0 and shifts[index - 1] == "Malam" and shift == "Pagi":
                 consecutive_violations += 1
                 pen_soft += W_MALAM_PAGI
                 soft_violation_count += 1
 
-        # SOFT: libur ±2 hari per minggu (hanya untuk pegawai aktif)
+        # SOFT: libur +-2 hari per minggu 
         for week_start in range(0, request.days, 7):
             week = shifts[week_start : week_start + 7]
             if len(week) < 7:
@@ -759,9 +635,6 @@ def _fitness(
                 pen_soft += deviation * (W_WEEKLY_DAY_OFF * 0.2)  # 20% penalty
                 soft_violation_count += 1
 
-    # SOFT: mentoring (junior tanpa senior per shift)
-    # PERF: pakai index junior_count/senior_count yang sudah dibangun di atas
-    # (sebelumnya: scan ulang seluruh chromosome per (day, dept, shift)).
     for day_index in range(request.days):
         for (dept_id, shift) in requirement_map.keys():
             key = (dept_id, shift, day_index)
@@ -771,13 +644,11 @@ def _fitness(
             if n_juniors == 0 and n_seniors == 0:
                 continue
 
-            # Junior lebih banyak dari senior (butuh mentoring)
             if n_juniors > n_seniors:
                 gap = n_juniors - n_seniors
                 junior_mentoring_violations += gap
                 pen_soft += gap * W_JUNIOR_MENTORING
 
-    # ── OPTIMIZATION (meminimalkan biaya) ─────────────────────────
     active_salary = sum(
         employees_by_id[emp_id].salary for emp_id in active_employee_ids
     )
@@ -788,23 +659,11 @@ def _fitness(
         + (active_salary / 1_000_000) * W_SALARY_PER_MILLION
     )
 
-    # ── CLUSTER BALANCE & COVERAGE (untuk metrics, bukan reward) ─────────────
     cluster_balance  = _cluster_balance(chromosome, employees_by_id)
     total_req_slots  = sum(req.required_staff for req in request.requirements) * request.days
     exact_fill_slots = max(0, total_req_slots - staff_shortage - staff_over)
     coverage_ratio   = exact_fill_slots / max(total_req_slots, 1)
 
-    # ── FINAL FITNESS ─────────────────────────────────────────────────────────
-    # Normalisasi TERPISAH per kategori dengan bobot eksplisit:
-    #   Hard   70% — GA sangat prioritaskan hilangkan hard violation
-    #   Soft   20% — GA usahakan penuhi soft constraint
-    #   Opt    10% — Optimasi biaya (sekunder)
-    #
-    # Kenapa terpisah: jika digabung dalam 1 denominator, max_hard_pen yang
-    # sangat besar (94.8% dari total) membuat 1 hard violation hanya turunkan
-    # fitness ~2 poin dari 10000 → GA tidak termotivasi menghilangkan H-violation.
-    # Dengan normalisasi terpisah, 1 hard violation = turun 70% × (1/n_slots)
-    # → jauh lebih terasa di fitness.
     n_employees  = max(len(chromosome), 1)
     n_slots      = max(total_req_slots, 1)
 
@@ -827,25 +686,9 @@ def _fitness(
     ratio_soft = min(1.0, pen_soft / max_soft_pen)
     ratio_opt  = min(1.0, pen_optimization / max_opt_pen)
 
-    # FORMULA FITNESS — hard constraint MULTIPLICATIVE (bukan additive):
-    #
-    # Pendekatan additive lama:
-    #   combined = 0.70*hard + 0.20*soft + 0.10*opt
-    #   Problem: kromosom dengan hard=0.1, soft=0, opt=0 → combined=0.07 → fitness=9300
-    #            kromosom dengan hard=0, soft=0.5, opt=0 → combined=0.10 → fitness=9000
-    #            Hard violation BISA tertutupi oleh soft yang bagus!
-    #
-    # Pendekatan baru — HARD CONSTRAINT MULTIPLICATIVE:
-    #   hard_factor = (1 - ratio_hard)^2  → kromosom dengan hard violation
-    #                                        kehilangan fitness secara eksponensial
-    #   soft_opt = 0.70*ratio_soft + 0.30*ratio_opt (hanya dihitung jika hard=0)
-    #   fitness = BASE × hard_factor × (1 - soft_ratio_combined)
-    #
-    # Efek: 1 hard violation (ratio_hard=0.01) → hard_factor=(0.99)^2=0.98 → OK
-    #       5 hard violations (ratio_hard=0.05) → hard_factor=(0.95)^2=0.90 → -900
-    #       10 hard violations(ratio_hard=0.10) → hard_factor=(0.90)^2=0.81 → -1900
-    # Kromosom dengan hard violation SELALU kalah dari yang tidak ada violation.
-    hard_factor        = (1.0 - ratio_hard) ** 2   # eksponensial untuk hard
+    # FORMULA FITNESS ——————————
+    
+    hard_factor        = (1.0 - ratio_hard) ** 2  
     soft_ratio_combined = 0.70 * ratio_soft + 0.30 * ratio_opt
 
     FLOOR_RATIO = 0.01
@@ -909,45 +752,6 @@ def _crossover(
     rng: random.Random,
     request: "GenerateScheduleRequest | None" = None,
 ) -> tuple[Chromosome, Chromosome]:
-    """Crossover SLOT-AWARE — secara struktural tidak bisa menciptakan shortage.
-
-    MASALAH crossover konvensional (uniform/two-point/segment):
-      Mengambil shift (emp, day) dari P1 atau P2 secara bebas.
-      Misal emp_5 di P1 = Pagi hari-3 (mengisi slot Pagi-DeptA-hari3).
-           emp_5 di P2 = Libur hari-3.
-      Child ambil dari P2 → emp_5 Libur → slot Pagi-DeptA-hari3 kehilangan 1 staf
-      → SHORTAGE. Tidak ada cara menghindari ini dengan crossover per-gen bebas.
-
-    SOLUSI — dua mode crossover yang constraint-safe:
-
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │ 60% → EMPLOYEE-SWAP PER SLOT                                            │
-    │                                                                         │
-    │   Untuk setiap (dept, shift, day):                                      │
-    │     P1 punya staf [A, B, C], P2 punya [A, D, E] (keduanya valid)       │
-    │     Child1: ambil [A, B] dari P1 + [D] dari P2  → tetap 3 orang        │
-    │     Child2: ambil [A, D] dari P2 + [B] dari P1  → tetap 3 orang        │
-    │                                                                         │
-    │   Rasio split (berapa dari P1 vs P2) dipilih acak: 50%, 33%, atau 67%. │
-    │   Hasilnya: komposisi staf per slot berbeda dari kedua parent,          │
-    │   tapi jumlah staf SELALU = required_staff → tidak ada shortage.        │
-    │                                                                         │
-    │   Diversitas: employee yang berbeda mengisi slot yang sama              │
-    │   → jadwal C1-C5 punya komposisi tim yang benar-benar berbeda.          │
-    ├─────────────────────────────────────────────────────────────────────────┤
-    │ 40% → DAY-BLOCK SWAP                                                    │
-    │                                                                         │
-    │   Pilih 1 titik potong (cut_day) secara acak.                           │
-    │   Child1: hari [0:cut] dari P1 + hari [cut:] dari P2                   │
-    │   Child2: hari [0:cut] dari P2 + hari [cut:] dari P1                   │
-    │                                                                         │
-    │   Kenapa aman: setiap "hari blok" dari P1 dan P2 masing-masing         │
-    │   sudah valid (tidak ada shortage di hari-hari itu). Menggabungkan      │
-    │   dua blok hari yang masing-masing valid menghasilkan jadwal valid.     │
-    │   Syarat: setiap hari dalam P1 dan P2 sudah H:0 sebelum crossover.     │
-    │   Inisialisasi yang benar menjamin ini.                                 │
-    └─────────────────────────────────────────────────────────────────────────┘
-    """
     child_one: Chromosome = copy.deepcopy(parent_one)
     child_two: Chromosome = copy.deepcopy(parent_two)
     employee_ids = list(parent_one.keys())
@@ -956,7 +760,7 @@ def _crossover(
     crossover_mode = rng.random()
 
     if crossover_mode < 0.60 and request is not None:
-        # ── Employee-swap per slot ─────────────────────────────────────────
+        # ── Employee-swap per slot
         # Iterasi per (dept, shift, day) dan tukar subset employee antar child.
         requirement_map = _requirements_by_key(request.requirements)
 
@@ -967,8 +771,6 @@ def _crossover(
             pass
         # Kita butuh employees_by_id — tidak tersedia di sini.
         # Fallback: gunakan DAY-BLOCK jika request tidak punya employee map.
-        # Solusi: pass langsung dept info melalui child manipulation.
-        # Lakukan swap per hari random (aman karena 1 hari penuh dari 1 parent)
         cut_day = rng.randint(1, max(1, n_days - 1))
         for emp_id in employee_ids:
             child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
@@ -977,7 +779,6 @@ def _crossover(
     else:
         # ── Day-block swap ─────────────────────────────────────────────────
         # Potong di 1 titik hari: child1 = P1[0:cut] + P2[cut:]
-        # Setiap blok hari sudah valid → gabungan juga valid.
         cut_day = rng.randint(1, max(1, n_days - 1))
         for emp_id in employee_ids:
             child_one[emp_id] = parent_one[emp_id][:cut_day] + parent_two[emp_id][cut_day:]
@@ -993,36 +794,6 @@ def _mutate(
     mutation_rate: float,
     rng: random.Random,
 ) -> Chromosome:
-    """Mutasi CONSTRAINT-SAFE — hanya operasi yang tidak bisa menciptakan shortage.
-
-    PRINSIP: setiap tipe mutasi mempertahankan jumlah staf per (dept, shift, day).
-    Tidak ada regen acak atau deactivate yang bisa mengosongkan slot yang terisi.
-
-    ┌─────────────────────────────────────────────────────────────────────────┐
-    │ Tipe A (50%): DAY-SWAP dalam satu employee                             │
-    │                                                                         │
-    │   Tukar jadwal 2 hari milik 1 employee (dalam 1 minggu atau lintas).   │
-    │   Contoh: emp_5 hari-3=Pagi, hari-5=Libur → hari-3=Libur, hari-5=Pagi │
-    │                                                                         │
-    │   AMAN: slot (Pagi,DeptA,hari-3) kehilangan emp_5 tapi juga mendapat  │
-    │   emp_5 di hari-5. Total staf per slot TIDAK berubah karena:           │
-    │   - emp_5 masih kerja Pagi, hanya pindah hari                          │
-    │   - slot hari-3 dan hari-5 sama-sama di-adjust secara simetris         │
-    │   Catatan: bisa menciptakan shortage jika 2 hari berbeda dept/shift.   │
-    │   Oleh karena itu, swap HANYA dilakukan antar hari milik employee      │
-    │   yang SAMA — perubahan hanya pada distribusi libur, bukan shift type. │
-    ├─────────────────────────────────────────────────────────────────────────┤
-    │ Tipe B (50%): EMPLOYEE-SWAP antar employee se-dept se-hari             │
-    │                                                                         │
-    │   Tukar shift 1 hari antara 2 employee di departemen yang sama.        │
-    │   Contoh: emp_5 hari-3=Pagi, emp_7 hari-3=Sore → emp_5=Sore, emp_7=Pagi│
-    │                                                                         │
-    │   AMAN: slot (Pagi,DeptA,hari-3) tetap terisi oleh 1 orang (berganti  │
-    │   dari emp_5 ke emp_7). Slot (Sore,DeptA,hari-3) juga tetap terisi.   │
-    │   Total staf per slot tidak berubah — hanya SIAPA yang mengisi berubah.│
-    │   Ini menciptakan variasi komposisi tim tanpa melanggar hard constraint.│
-    └─────────────────────────────────────────────────────────────────────────┘
-    """
     mutated = copy.deepcopy(chromosome)
     employee_ids = list(mutated.keys())
 
@@ -1043,8 +814,6 @@ def _mutate(
         if mutation_type < 0.50:
             # ── Tipe A (50%): Day-swap dalam 1 employee ──────────────────────
             # Tukar 2 hari acak dalam jadwal employee ini.
-            # Ini hanya mengubah KAPAN dia libur atau kerja — tidak mengubah
-            # total shift yang dia lakukan → slot coverage tidak berubah.
             if not _is_employee_active(mutated[employee_id]):
                 continue
             if request.days < 2:
@@ -1061,12 +830,10 @@ def _mutate(
         else:
             # ── Tipe B (50%): Employee-swap se-dept, hari yang sama ──────────
             # Tukar shift antara employee_id dan employee lain di dept yang sama
-            # pada 1 hari random. Jumlah staf per slot tetap sama persis.
             day = rng.randrange(request.days)
             employee = employees_by_id[employee_id]
             emp_shift = mutated[employee_id][day]
 
-            # Preferensi: swap dengan se-cluster (mempertahankan cluster distribution)
             same_cluster = [
                 other_id for other_id in by_dept_cluster.get(
                     (employee.department_id, employee.cluster), ()
@@ -1107,22 +874,6 @@ def _run_ga(
     mutation_rate_max: float,
     rng: random.Random,
 ) -> tuple[Chromosome, float, list[float], list[float], list[Chromosome], list[float]]:
-    """Jalankan GA dengan EARLY STOPPING dan ADAPTIVE MUTATION.
-    
-    Sesuai tugas GA sebelumnya:
-    - Elitism: N terbaik langsung ke generasi berikutnya
-    - Adaptive Mutation: rate naik saat stagnan, turun saat membaik
-    - Early Stopping: berhenti jika tidak ada improvement signifikan
-    - Tournament Selection + Crossover 80/20 + Mutasi 3 tipe
-    
-    Returns:
-        (best_chromosome, best_fitness, history_best, history_avg,
-         final_population, final_scores)
-
-        final_population/final_scores dikembalikan agar caller (generate_candidates)
-        tidak perlu menjalankan ulang _fitness() pada seluruh populasi akhir
-        (PERF: menghindari 1 batch evaluasi penuh yang redundan).
-    """
     population_size = len(population)
     
     # Hitung fitness awal
@@ -1281,20 +1032,6 @@ def _chromosome_to_candidate(
 
 
 def generate_candidates(request: GenerateScheduleRequest) -> list[ScheduleCandidate]:
-    """Generate kandidat jadwal optimal menggunakan GA.
-    
-    Pipeline:
-    1. Validasi input (employees, requirements, departments)
-    2. Inisialisasi populasi CLUSTER-AWARE (50% balanced, 30% cost, 20% quality)
-    3. Run GA dengan elitism, adaptive mutation, early stopping
-    4. Collect kandidat terbaik dari semua generasi
-    5. Deduplikasi dan return top N candidates
-    
-    Sesuai proposal:
-    - K-Means Clustering digunakan untuk inisialisasi populasi GA
-    - GA optimasi dengan constraint operasional murni
-    - Output: kandidat-kandidat jadwal siap evaluasi Random Forest
-    """
     # ── Validasi ─────────────────────────────────────────────────────
     if not request.employees:
         raise ValueError("employees tidak boleh kosong")

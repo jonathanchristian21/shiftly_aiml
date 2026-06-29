@@ -1,29 +1,3 @@
-"""
-kmeans_service.py  —  FINAL (with fixes)
-=========================================
-Service K-Means clustering untuk segmentasi profil pegawai Shiftly.
-
-1. Konsistensi salary_max:
-   - Salary_max diambil dari CSV saat inisialisasi (fallback ke pool jika CSV tidak ada)
-   - Digunakan untuk menghitung cost_proxy di semua tempat (clustering & prediksi)
-   - Disimpan sebagai atribut service, tidak diubah oleh pool runtime
-
-2. Thread safety:
-   - State (scaler, model, mapping, salary_max) dibungkus dalam class dengan threading.Lock
-   - Aman untuk concurrent requests di FastAPI (Gunicorn/Uvicorn multi-worker)
-
-3. Bobot senior_proxy lebih rasional:
-   - (2*(job_level/5) + edu + certs) / 4  → job_level berbobot 2×
-   - Alasan: job_level adalah indikator senioritas paling kuat (korelasi 0.978 dengan salary)
-   - Rentang tetap [0,1] dan masih mencakup sinyal pendidikan & sertifikasi
-
-4. Validasi empiris K dijalankan saat clustering (hasil disimpan, tidak mengubah K):
-   - validate_k_empirically() dipanggil setelah fit, hasilnya di log dan disimpan
-   - Berguna untuk monitoring, tetap K=4 digunakan
-
-5. Mapping profil tetap greedy deterministik, tidak ambigu karena random_state=42.
-"""
-
 from __future__ import annotations
 
 import os
@@ -61,19 +35,6 @@ def education_to_senior_score(value: str | None) -> float:
 
 
 def employee_composite_features(employee: Employee, salary_max: float) -> list[float]:
-    """
-    Hitung 3 composite feature dari profil pegawai.
-
-    senior_proxy (baru, bobot job_level 2x):
-        (2*(job_level/5) + education_score + min(certifications,1)) / 4
-        Rentang [0,1]. Memberi bobot lebih pada job_level karena paling informatif.
-
-    perf_proxy:
-        (rating/5 + min(satisfied,1)) / 2
-
-    cost_proxy:
-        salary / salary_max  (salary_max konsisten dari CSV/pool saat fitting)
-    """
     edu = education_to_senior_score(employee.education)
     certs = min(float(employee.certifications), 1.0)
     sat = min(float(employee.satisfied), 1.0)
@@ -86,18 +47,6 @@ def employee_composite_features(employee: Employee, salary_max: float) -> list[f
 
 
 def map_clusters_to_profiles(centroids: np.ndarray) -> dict[int, dict]:
-    """
-    Map indeks cluster KMeans (0-based) ke label bisnis dengan ID 1–4.
-
-    Heuristik greedy deterministik:
-      A (id=1) : senior + cost tertinggi
-      B (id=2) : senior + perf terendah
-      C (id=3) : dari sisa, senior + perf lebih tinggi
-      D (id=4) : sisanya
-
-    Karena KMeans menggunakan random_state=42, urutan centroid deterministik,
-    sehingga mapping stabil.
-    """
 
     n_clusters = len(centroids)
     mapping: dict[int, dict] = {}

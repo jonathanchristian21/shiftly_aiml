@@ -220,17 +220,17 @@
                     @php
                         // Label cluster di database adalah 1,2,3,4
                         if ($label == 1) {
-                            echo '<span class="text-emerald-600">● SHIFT LEADERS (A)</span><br>';
-                            echo 'Senior (PG), High Level & Salary';
+                            echo '<span class="text-amber-600">● WATCHLIST (D)</span><br>';
+                            echo 'Senior (PG), High Level & Salary, but Low Satisfaction — Risk of Burnout';
                         } elseif ($label == 2) {
                             echo '<span class="text-sky">● EXECUTORS (B)</span><br>';
                             echo 'Junior (UG), Lower Level & Salary';
                         } elseif ($label == 3) {
+                            echo '<span class="text-emerald-600">● SHIFT LEADERS (A)</span><br>';
+                            echo 'Senior (PG), High Level & Salary, High Satisfaction';
+                        } elseif ($label == 4) {
                             echo '<span class="text-purple-600">● STABILIZERS (C)</span><br>';
                             echo 'Mid-level, High Rating/Satisfied';
-                        } elseif ($label == 4) {
-                            echo '<span class="text-amber-600">● WATCHLIST (D)</span><br>';
-                            echo 'Lower Rating/Satisfied, Risk of Burnout';
                         } else {
                             echo '<span class="text-gray-600">● UNKNOWN PROFILE</span><br>';
                             echo 'Unmapped characteristics';

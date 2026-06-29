@@ -1,55 +1,3 @@
-"""
-train_rf_model.py
-=================
-Training pipeline Random Forest untuk memprediksi PROFIT SCORE jadwal rumah sakit.
-
-RF tidak lagi memprediksi salary — RF langsung memprediksi seberapa profitable
-suatu kandidat jadwal berdasarkan kombinasi fitur operasional dan finansial.
-
-KENAPA PENDEKATAN INI LEBIH BAIK:
------------------------------------
-Versi sebelumnya: RF prediksi salary → dikonversi ke skor
-  Masalah: salary bisa dihitung deterministik dari salary_calculator,
-  RF tidak menambah informasi baru.
-
-Versi baru: RF langsung prediksi profit_score dari fitur jadwal
-  Keuntungan: RF belajar pola INTERAKSI antar fitur yang tidak bisa
-  di-capture formula sederhana. Misalnya: jadwal dengan cluster_balance
-  tinggi + sedikit shift malam + pegawai bersertifikasi tinggi
-  menghasilkan kombinasi cost-quality yang lebih profitable daripada
-  sekadar menjumlahkan komponen-komponennya.
-
-ALUR PIPELINE:
---------------
-  1. Load Employee_Satisfaction_Index.csv
-  2. Jalankan GA berkali-kali dengan variasi employee dan requirements
-  3. Untuk setiap kandidat jadwal, hitung profit_score dengan formula bisnis
-  4. Kumpulkan: fitur jadwal (X) + profit_score (y) → dataset training
-  5. Train/test split 80/20
-  6. K-Fold CV (k=5) di train set
-  7. RandomizedSearchCV untuk hyperparameter tuning
-  8. Evaluasi MAE, RMSE, R² di training dan test set
-  9. Simpan model ke models/rf_profit_model.joblib
-
-PROFIT SCORE FORMULA (0-100):
-------------------------------
-  profit_score = revenue_proxy - cost_proxy - risk_proxy
-
-  revenue_proxy  = coverage_rate × dept_weight_avg × 40
-                 (seberapa baik shift terpenuhi × pentingnya dept)
-
-  cost_proxy     = (total_salary / benchmark_salary) × 30
-                 (seberapa mahal dibanding benchmark)
-
-  risk_proxy     = hard_violations × 8
-                 + soft_violation_ratio × 10
-                 + dayoff_violation_ratio × 7
-                 + night_to_morning_ratio × 5
-
-  Semua komponen dinormalisasi ke rasio (bukan nilai absolut) agar
-  tidak terpengaruh ukuran jadwal (7 hari vs 14 hari, sedikit vs banyak pegawai).
-"""
-
 from __future__ import annotations
 
 import os, sys, warnings
@@ -127,49 +75,6 @@ def load_employees(csv_path: str) -> list[Employee]:
 # ── STEP 2: Hitung profit_score per kandidat ──────────────────────────────────
 
 def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -> float:
-    """
-    Hitung profit_score (0-100) per kandidat jadwal.
-
-    RECALIBRATION (v2): formula sebelumnya terlalu bergantung pada cluster_balance
-    dan dept_weight yang range-nya sempit di data aktual → score stuck 27-31.
-
-    Kalibrasi baru berdasarkan range AKTUAL kondisi GA dengan fitness terpisah:
-      cluster_balance : 0.30 - 0.95  (lebih lebar, karena GA tanpa cluster reward)
-      coverage_ratio  : 0.70 - 1.00  (seberapa baik slot terpenuhi)
-      cost_ratio      : 0.50 - 1.20  (biaya vs benchmark)
-      soft_ratio      : 0.10 - 0.30
-      dayoff_ratio    : 0.20 - 0.55
-      hard_violation  : 0 - 100+
-
-    KOMPONEN BARU:
-    --------------
-    coverage_reward (0-40): KOMPONEN TERBESAR — seberapa baik semua shift terpenuhi.
-                            Hard constraint terpenuhi = layanan medis berjalan = revenue.
-                            Formula: ((coverage - 0.70) / 0.30) × 40
-                            coverage 1.0 (sempurna) → +40, coverage 0.70 → 0.
-
-    cluster_reward (0-25): distribusi cluster merata = tim lebih efektif.
-                           Dikalibrasi ulang: baseline 0.30 (bukan 0.65).
-                           Formula: ((cluster - 0.30) / 0.65) × 25
-
-    hard_penalty (×8): setiap hard violation langsung potong 8 poin.
-                       Lebih tinggi dari sebelumnya (×5) karena H-vio = revenue hilang.
-
-    cost_penalty (0-15): cost_ratio di atas 1.0 (di atas benchmark) → profit turun.
-
-    soft_penalty (0-10): soft violation mempengaruhi ergonomi dan kelelahan staf.
-
-    dayoff_penalty (0-8): kekurangan libur → risiko burnout → produktivitas turun.
-
-    ntm_penalty (0-5): malam→pagi = kelelahan akut → risiko medis.
-
-    TARGET RANGE (dikalibrasi ulang):
-      Ideal  (H:0, coverage=1.0, cluster≥0.80, cost rendah)    → 70-85
-      Bagus  (H:0, coverage≥0.90, cluster≥0.60, cost sedang)   → 50-70
-      Sedang (H:0, coverage≥0.80, cluster sedang)               → 35-50
-      Rendah (H:0, coverage rendah atau cluster sangat rendah)  → 15-35
-      Ada hard violation (H≥1)                                  →  0-15
-    """
     s            = candidate.summary
     total_assign = max(s.total_assignments, 1)
     active_ids   = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
@@ -230,25 +135,6 @@ def compute_profit_score(candidate, employees_by_id: dict, requirements: list) -
 # ── STEP 3: Ekstrak fitur jadwal untuk input RF ───────────────────────────────
 
 def extract_schedule_features(candidate, employees_by_id: dict) -> dict:
-    """
-    Ekstrak 12 fitur dari kandidat jadwal.
-    Semua fitur dinormalisasi ke rasio agar skala-invariant.
-
-    FITUR:
-    ------
-    1.  coverage_rate          : shift terpenuhi / total shift dibutuhkan
-    2.  avg_dept_weight        : rata-rata bobot tier dept pegawai aktif
-    3.  certified_ratio        : rasio pegawai bersertifikasi dari aktif
-    4.  senior_ratio           : rasio pegawai senior (PG) dari aktif
-    5.  night_ratio            : shift malam / total assignment
-    6.  night_to_morning_ratio : malam→pagi / total assignment
-    7.  cost_ratio             : total_salary / benchmark
-    8.  cluster_balance        : distribusi cluster (0-1)
-    9.  hard_violation_count   : jumlah hard violation (absolut, bukan rasio)
-    10. soft_violation_ratio   : soft violation / total assignment
-    11. dayoff_violation_ratio : dayoff violation / total assignment
-    12. avg_job_level          : rata-rata job_level pegawai aktif
-    """
     s             = candidate.summary
     total_assign  = max(s.total_assignments, 1)
     active_ids    = set(a.employee_id for a in candidate.assignments if a.shift != "Libur")
@@ -330,25 +216,6 @@ FEATURE_NAMES = [
 # ── STEP 4: Build training dataset dari hasil GA ──────────────────────────────
 
 def build_dataset(all_employees: list[Employee], n_rounds: int = 60) -> tuple[np.ndarray, np.ndarray]:
-    """
-    Generate dataset training dengan menjalankan GA berkali-kali
-    menggunakan variasi subset employee dan requirements.
-
-    KENAPA variasi:
-      Supaya RF belajar dari kondisi jadwal yang beragam:
-      - Sedikit vs banyak pegawai (termasuk skenario 300-500 employee)
-      - Dominasi Tier 1 vs Tier 3
-      - Jadwal 7, 14, hingga 31 hari (sesuai kondisi produksi)
-      Tanpa variasi skenario besar, RF tidak bisa menilai jadwal 31 hari
-      dengan benar dan cenderung memberi skor rendah untuk semua kandidat.
-
-    DISTRIBUSI ROUNDS (n_rounds=60):
-      - 40% small  : 12–30% employee, 7–14 hari  (kondisi kecil, baseline)
-      - 35% medium : 30–70% employee, 14–21 hari  (kondisi menengah)
-      - 25% large  : 70–100% employee, 21–31 hari (kondisi produksi nyata)
-
-    60 rounds × 3 kandidat = 180 baris — cukup untuk RF belajar pola besar.
-    """
     rng      = np.random.default_rng(42)
     X_list, y_list = [], []
     total    = len(all_employees)
